@@ -283,7 +283,7 @@ export function b1() {
       location.hash = '#/care';
     });
     // drag the dock up → the care sheet (148 ↔ 492 detents)
-    dragToCare(root);
+    const undrag = dragToCare(root);
     // labels fade in only while it's idle, so they never fight the animation.
     // "idle" = it stopped moving, not "it happens to stand at screen centre".
     let px = R.scene.pose.x, py = R.scene.pose.y;
@@ -292,22 +292,31 @@ export function b1() {
       px = R.scene.pose.x; py = R.scene.pose.y;
       $$('.oc', root).forEach((e) => e.style.opacity = moving ? 0 : 1);
     }, 400);
-    return () => clearInterval(t);
+    return () => { clearInterval(t); undrag(); };
   }
   return { html, mount };
 }
 
 function dragToCare(root) {
-  const dock = $('#dock', root); if (!dock) return;
+  const dock = $('#dock', root); if (!dock) return () => {};
   let y0 = null;
-  // capture, or a mouse drag starting on the grab handle exits the dock after ~6px
-  dock.addEventListener('pointerdown', (e) => { y0 = e.clientY; dock.setPointerCapture(e.pointerId); });
-  dock.addEventListener('pointermove', (e) => {
+  // a mouse drag starting on the grab handle exits the dock ~18px before the threshold,
+  // so the move has to be tracked on the window. Capturing the pointer on #dock would
+  // also work, but it retargets the tap's click to #dock and the tiles stop navigating.
+  const move = (e) => {
     if (y0 == null) return;
     if (y0 - e.clientY > 34) { y0 = null; buzz(6); location.hash = '#/care'; }
-  });
-  dock.addEventListener('pointerup', () => { y0 = null; });
-  dock.addEventListener('pointercancel', () => { y0 = null; });
+  };
+  const end = () => { y0 = null; };
+  dock.addEventListener('pointerdown', (e) => { y0 = e.clientY; });
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', end);
+  window.addEventListener('pointercancel', end);
+  return () => {
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', end);
+    window.removeEventListener('pointercancel', end);
+  };
 }
 
 export function b2() {
