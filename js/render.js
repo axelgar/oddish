@@ -447,8 +447,10 @@ function faceDir(p, yaw, pitch) {
  *  foreshortens, shears and rolls with the mesh at every yaw instead of sliding
  *  across it as an upright screen-space ellipse — which is what made the eyes and
  *  mouth detach from the bulb on a drag-spin. Both columns are normalised by the
- *  body's own scale at that point, so the matrix is the identity when the anchor
- *  faces the camera and every px size below still means what it did.
+ *  body's own scale at that point, so a decal dead-centre on the front of the bulb is
+ *  drawn at its nominal px size. Anywhere else it is already foreshortened — at rest
+ *  the eye anchors sit at ~0.90 and the blush at ~0.73 — which is correct, not a bug,
+ *  but it does mean the px sizes below read as "at most this wide", not "this wide".
  *
  *  Column 1 is surface-right, column 2 is surface-DOWN — so callers keep drawing in
  *  ordinary y-down canvas coordinates. */
@@ -467,10 +469,17 @@ function decal(dx, dy, dz, tr, cam) {
   const Pd = at(n.x - e * v.x, n.y - e * v.y, n.z - e * v.z);
   const [bx, by] = BODY_SHAPE[tr.bodyShape] || BODY_SHAPE.round;
   const g = e * R * P.k;
+  const m = [(Pu.X - P.X) / (g * bx), (Pu.Y - P.Y) / (g * bx),
+             (Pd.X - P.X) / (g * by), (Pd.Y - P.Y) / (g * by)];
+  // Past the PERSPECTIVE limb the two tangent samples straddle the silhouette and the
+  // frame folds back on itself: det < 0 means the decal is mirrored. For the mouth
+  // that is literally a frown — the lower lip bows above the corners. Callers cull on
+  // it, so the smile is pinned to the geometry rather than to whatever pose scale the
+  // screens happen to use. The `z` culls alone can't do this: they are constants, but
+  // the limb moves with R / FOCAL.
   return {
-    X: P.X, Y: P.Y, z: faceDir({ n }, yaw, pitch).z,
-    m: [(Pu.X - P.X) / (g * bx), (Pu.Y - P.Y) / (g * bx),
-        (Pd.X - P.X) / (g * by), (Pd.Y - P.Y) / (g * by)],
+    X: P.X, Y: P.Y, z: faceDir({ n }, yaw, pitch).z, m,
+    det: m[0] * m[3] - m[1] * m[2],
   };
 }
 
@@ -618,7 +627,7 @@ function drawFace(c, cam, met, sick) {
 
   eyes.forEach((e) => {
     const d = decal(...e, tr, cam);
-    if (d.z < 0.16) return;
+    if (d.z < 0.16 || d.det <= 0) return;      // det <= 0 → mirrored; a shut eye would arc the wrong way
     // the frame does the foreshortening now; this is only a clean dissolve at the rim
     const fade = Math.min(1, (d.z - 0.16) / 0.25);
     const lid = Math.max(0.05, Math.min(1, restLid * bl * scene._eyeLid));
@@ -654,7 +663,7 @@ function drawFace(c, cam, met, sick) {
   if (met.joy > 50) {
     for (const s of [-1, 1]) {
       const d = decal(s * 0.56, -0.12, 0.78, tr, cam);
-      if (d.z < 0.10) continue;
+      if (d.z < 0.10 || d.det <= 0) continue;
       onSurface(d);
       ctx.fillStyle = `rgba(242,134,126,${0.22 * Math.min(1, (d.z - 0.10) / 0.2) * ((met.joy - 50) / 50)})`;
       ctx.beginPath(); ctx.ellipse(0, 0, 7.5 * S, 4.8 * S, 0, 0, 7); ctx.fill();
@@ -664,7 +673,7 @@ function drawFace(c, cam, met, sick) {
 
   // mouth — a closed smile that opens into a happy "D" like the reference art -
   const md = decal(0, -0.24, 0.94, tr, cam);
-  if (md.z > 0.14) {
+  if (md.z > 0.14 && md.det > 0) {           // det <= 0 mirrors the frame, which inverts the smile
     const open = Math.max(scene._mouth,
       reduced() ? 0.16 : 0.16 + 0.05 * Math.sin(t * 0.9) + (met.joy > 60 ? 0.10 : 0));
     const wide = 24 * S * tr.grin;
@@ -717,7 +726,7 @@ function drawMud(c, cam, met) {
     if (m.erased) continue;
     if (m.i / mudSpots(c).length > amount + 0.15) continue;
     const d = decal(m.x, m.y, m.z, tr, cam);
-    if (d.z < 0.05) continue;
+    if (d.z < 0.05 || d.det <= 0) continue;
     onSurface(d);
     ctx.fillStyle = `rgba(74,52,32,${0.38 * Math.min(1, d.z * 2)})`;
     ctx.beginPath();

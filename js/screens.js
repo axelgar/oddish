@@ -658,8 +658,12 @@ export function groom() {
 export function c1({ id }) {
   const raw = S.creatureById(id); if (!raw) return f2();
   const c = S.view(raw);
+  // 0.56, not 0.62: this is the one screen that spins a full 360°, and the crown is
+  // tall enough now that at 0.62 most genomes lose their leaf tips off the top of the
+  // stage at some yaw. Scale is the knob rather than y — pose.y IS the ground contact,
+  // so dropping it puts the feet under the sheet at top:352 instead.
   R.set({ mode: 'creature', creature: c, field: S.session.activeFieldId, groundTop: 404, props: false,
-    hidden: false, wander: false, pose: { x: 195, y: 330, scale: 0.62 } });
+    hidden: false, wander: false, pose: { x: 195, y: 330, scale: 0.56 } });
   const t = c.traits;
   const chips = [`${t.fronds} fronds`, S.PALETTES[t.palette].label, t.bodyShape, `${t.eyeType} eyes`,
     c.material === 'common' ? 'matte' : c.material, `likes ${S.BERRY_NAMES[t.favouriteBerry]}`];
