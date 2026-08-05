@@ -144,11 +144,6 @@ export function hitCreature(px, py) {
   return (px - x) ** 2 / (r * r) + (py - cy) ** 2 / ((r * 1.25) ** 2) < 1;
 }
 
-export function look(px, py) {
-  scene.look.x = Math.max(-1, Math.min(1, (px - scene.pose.x) / 150));
-  scene.look.y = Math.max(-1, Math.min(1, (py - bodyCentreY()) / 150));
-}
-
 /* --------------------------------------------------------------- noise ---- */
 
 function h3(x, y, z, s) {
@@ -1344,6 +1339,12 @@ function tween(dt) {
   const mouthT = scene.chewUntil > T ? 0.28 + 0.42 * Math.abs(Math.sin(T * 9.5)) : scene.mouth;
   scene._mouth += (mouthT - scene._mouth) * (1 - Math.exp(-dt * 12));
   scene._eyeLid += (scene.eyeLid - scene._eyeLid) * (1 - Math.exp(-dt * 10));
+
+  // the gaze drifts back to centre. Nothing tracks the pointer any more, so
+  // whatever last aimed it (a thrown seed) has to let go on its own.
+  const kl = 1 - Math.exp(-dt * 3);
+  scene.look.x -= scene.look.x * kl;
+  scene.look.y -= scene.look.y * kl;
 }
 
 function drawSprites() {

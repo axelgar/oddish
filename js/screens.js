@@ -284,6 +284,23 @@ export function b1() {
     });
     // drag the dock up → the care sheet (148 ↔ 492 detents)
     const undrag = dragToCare(root);
+    // tap the creature itself → the cuddle reaction, minus the hold and the gains.
+    // ponytail: no petting meter, this is affection with nothing attached.
+    const stage = $('#stage');
+    let squint = 0;
+    const pet = (e) => {
+      // the props and the dock sit inside the hit ellipse once it wanders left —
+      // a tap on one of those is a navigation, not a pet
+      if (e.target.closest('button, .oc, .dock')) return;
+      const r = stage.getBoundingClientRect();
+      const sx = (e.clientX - r.left) / (r.width / R.W), sy = (e.clientY - r.top) / (r.height / R.H);
+      if (!R.hitCreature(sx, sy)) return;
+      R.scene.eyeLid = 0.14; R.wiggle(0.5); R.squash(0.14, 0.5);
+      buzz(6);
+      clearTimeout(squint);
+      squint = setTimeout(() => { R.scene.eyeLid = 1; }, 600);
+    };
+    stage.addEventListener('pointerdown', pet);
     // labels fade in only while it's idle, so they never fight the animation.
     // "idle" = it stopped moving, not "it happens to stand at screen centre".
     let px = R.scene.pose.x, py = R.scene.pose.y;
@@ -292,7 +309,11 @@ export function b1() {
       px = R.scene.pose.x; py = R.scene.pose.y;
       $$('.oc', root).forEach((e) => e.style.opacity = moving ? 0 : 1);
     }, 400);
-    return () => { clearInterval(t); undrag(); };
+    return () => {
+      clearInterval(t); undrag(); clearTimeout(squint);
+      stage.removeEventListener('pointerdown', pet);
+      R.scene.eyeLid = 1;   // or leaving mid-squint carries shut eyes to the next screen
+    };
   }
   return { html, mount };
 }

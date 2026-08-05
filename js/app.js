@@ -80,13 +80,6 @@ document.addEventListener('click', (e) => {
   location.hash = t.dataset.go;
 });
 
-/* -------------------------------------------------- eyes follow the thumb -- */
-
-stage.addEventListener('pointermove', (e) => {
-  const r = stage.getBoundingClientRect();
-  R.look((e.clientX - r.left) / (r.width / R.W), (e.clientY - r.top) / (r.height / R.H));
-});
-
 /* ------------------------------------------------------------- the glitch -- */
 
 function scheduleGlitch() {
