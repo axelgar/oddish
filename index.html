@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#22403a">
+<!-- Add to Home Screen → launches chromeless, the stage gets the whole display.
+     iOS wants the apple- prefixed key; the unprefixed one covers Android. -->
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Glitch · Oddish</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- ponytail: Google Fonts CDN. Self-host before a venue with bad wifi (handoff says so). -->
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./css/app.css">
+<script type="importmap">
+{"imports":{"d3":"https://cdn.jsdelivr.net/npm/d3@7/+esm"}}
+</script>
+</head>
+<body>
+
+<!-- F3 · desktop surround. Never a second layout — the stage just clamps and scales. -->
+<div class="deskchrome" aria-hidden="true">
+  <div class="mark deskmark">GLITCH</div>
+  <div class="mono deskline">BUILT FOR A PHONE · IT WORKS HERE ANYWAY</div>
+</div>
+
+<div class="stagewrap">
+  <div class="stage" id="stage">
+    <!-- world → creature → overlay. Same stacking the fog/vig/grain/tear layers use. -->
+    <canvas id="scene" aria-hidden="true"></canvas>
+    <canvas id="scene-gl" aria-hidden="true"></canvas>
+    <canvas id="scene-fx" aria-hidden="true"></canvas>
+    <!-- ponytail: placeholder copy. Near-zero audience, but it is user-facing text —
+         PLANS/ODDISH_WEBGL_RENDERER_V1.md open question 3 has it unwritten. -->
+    <div class="nogl" id="nogl" role="status">This creature needs a browser that can draw
+      3D. Try Safari or Chrome, or turn hardware acceleration back on.</div>
+    <div class="statusbar mono" id="statusbar"><span>9:41</span><span>▮▮▮</span></div>
+    <main id="ui" class="ui"></main>
+    <div class="fog" aria-hidden="true"></div>
+    <div class="vig" aria-hidden="true"></div>
+    <div class="grain" aria-hidden="true"></div>
+    <div class="tear" id="tear" aria-hidden="true"></div>
+  </div>
+</div>
+
+<div class="deskchrome deskfoot" aria-hidden="true">
+  <div class="chip desknudge">Tap the tag on your glass for the real thing</div>
+</div>
+
+<script type="module" src="./js/app.js"></script>
+</body>
+</html>
