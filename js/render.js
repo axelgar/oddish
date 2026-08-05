@@ -200,19 +200,59 @@ function bodyMesh(tr, seed, seg = SEG, ring = RING) {
   return { verts, quads };
 }
 
+// The bulb stands on a leg + foot per side. Three rules hold the assembly together:
+// the lowest vertex stays at y = -1.34, because the contact shadow is pinned to it;
+// the leg's open ends are buried, top inside the bulb and bottom inside the foot, so
+// neither reads as a hole; and the ankle sits low with a flat pad, which is what buys
+// the leg its visible length — a `tall` bulb hangs to about y = -1.0 at the hip, and
+// anything higher swallows the leg whole and we are back to nubs.
+const ANKLE = -1.26, LEG_X = 0.48, LEG_Z = 0.10;
+// bodyMesh shears the bulb by `lean * 0.55 * ny`; this is that shear at the hip, so
+// the legs stay under the belly instead of drifting out from beneath it.
+const legLean = (tr) => -tr.lean * 0.48;
+
+/** A very short tapered post from under the bulb down to the ankle. Short — the bulb
+ *  still nearly rests on the ground, per the reference — but long enough that the
+ *  feet are visibly attached rather than nubs lying beside it. How much shows depends
+ *  on how low the bulb hangs, so a `tall` body genuinely stands on stubbier legs. */
+function legMesh(side, tr) {
+  const verts = [], quads = [], seg = 10, ring = 5;
+  const top = -0.62;                                   // well inside the bulb
+  for (let j = 0; j <= ring; j++) {
+    const t = j / ring;
+    const y = top + (ANKLE - top) * t;
+    const r = 0.150 - 0.028 * t;                       // tapers a little toward the ankle
+    for (let i = 0; i <= seg; i++) {
+      const th = (i / seg) * Math.PI * 2;
+      verts.push({
+        x: Math.cos(th) * r + side * LEG_X + legLean(tr),
+        y,
+        z: Math.sin(th) * r * 0.92 + LEG_Z,
+      });
+    }
+  }
+  const idx = (i, j) => j * (seg + 1) + i;
+  for (let j = 0; j < ring; j++) for (let i = 0; i < seg; i++)
+    quads.push([idx(i, j), idx(i + 1, j), idx(i + 1, j + 1), idx(i, j + 1)]);
+  return { verts, quads };
+}
+
+/** A flat splayed pad, toes turned out and forward — a foot, not a boot. It swallows
+ *  the bottom of the leg, and its underside is the creature's ground contact. */
 function footMesh(side, tr) {
-  const verts = [], quads = [], seg = 8, ring = 5;
+  const verts = [], quads = [], seg = 10, ring = 6;
+  const toe = side * 0.36;                             // splay about Y, toes outward
+  const ct = Math.cos(toe), st = Math.sin(toe);
   for (let j = 0; j <= ring; j++) {
     const phi = (j / ring) * Math.PI;
     for (let i = 0; i <= seg; i++) {
       const th = (i / seg) * Math.PI * 2;
       const nx = Math.sin(phi) * Math.cos(th), ny = Math.cos(phi), nz = Math.sin(phi) * Math.sin(th);
-      // short round nubs peeking out from under the bulb — feet, not boots.
-      // lowest vertex stays at y = -1.34, same ground contact as always
+      const px = nx * 0.25, pz = nz * 0.34 + 0.16;     // longer than it is wide
       verts.push({
-        x: nx * 0.24 + side * 0.38,
-        y: ny * 0.28 - 1.11 + (ny < 0 ? 0.05 : 0),
-        z: nz * 0.26 + 0.12,
+        x: px * ct + pz * st + side * LEG_X + legLean(tr),
+        y: ny * 0.08 - 1.26,                           // lowest vertex = -1.34, as always
+        z: -px * st + pz * ct + LEG_Z,
       });
     }
   }
@@ -228,14 +268,23 @@ function footMesh(side, tr) {
 function leafMesh(k, n, tr, seed, droop) {
   const along = 9, across = 6;
   const spread = (k - (n - 1) / 2) / Math.max(1, n - 1);
-  const roll = -spread * 1.8 + tr.lean * 0.25;             // tips fan outward on screen (±~52°)
-  const yaw = spread * 0.55;                               // slight depth so it's a crown, not a card
+  const roll = -spread * 1.30 + tr.lean * 0.25;            // tips fan outward on screen (±~37°)
+  const yaw = spread * 0.70;                               // slight depth so it's a crown, not a card
   // mostly upright — negative pitch leans tips away from camera, so keep it shallow
   // or the whole bouquet hides behind the head
-  const pitch = -0.36 + Math.abs(spread) * 0.06 + droop * 0.38;
-  const L = 2.1 + noise3(k * 3, 1, 1, seed) * 0.30;
-  const halfW = 0.50 + noise3(k * 3, 5, 2, seed) * 0.07;
-  const anchor = { x: spread * 0.14, y: 0.76, z: -0.10 };
+  const pitch = -0.28 + Math.abs(spread) * 0.06 + droop * 0.38;
+  // The crown carries the silhouette, so it is big — clearly taller than the bulb.
+  // Long and comparatively narrow: widening a leaf as much as you lengthen it makes
+  // the bouquet read squat however tall it actually is. The fan is tighter than it
+  // was for the same reason the leaves aren't fatter — on a 390px stage the outer
+  // tips leave the screen long before the height stops being useful. The C3 portrait
+  // pose was pulled back to match; a bigger crown does not fit the old framing.
+  const L = 3.00 + noise3(k * 3, 1, 1, seed) * 0.42;
+  const halfW = 0.55 + noise3(k * 3, 5, 2, seed) * 0.08;
+  // Fronds sprout from a ring, not a line: neighbours alternate fore and aft. The fan
+  // itself is a roll in the screen plane, so without this the whole bouquet lies in
+  // one plane and a quarter-turn flattens it to a card.
+  const anchor = { x: spread * 0.16, y: 0.76, z: -0.10 + (k % 2 ? 0.21 : -0.21) };
 
   const cp = Math.cos(pitch), sp = Math.sin(pitch);
   const cr = Math.cos(roll), sr = Math.sin(roll);
@@ -359,7 +408,7 @@ function meshesFor(c, droop, lod = 1) {
   const m = {
     key,
     body: bodyMesh(tr, seed, lod === 1 ? SEG : 10, lod === 1 ? RING : 7),
-    feet: merge([footMesh(-1, tr), footMesh(1, tr)]),
+    feet: merge([legMesh(-1, tr), footMesh(-1, tr), legMesh(1, tr), footMesh(1, tr)]),
     leaves,                      // kept apart for the veins, which project the midribs
     crown: merge(leaves),
   };
@@ -389,6 +438,47 @@ function faceDir(p, yaw, pitch) {
   const x1 = p.n.x * cy + p.n.z * s, z1 = -p.n.x * s + p.n.z * cy;
   const y2 = p.n.y * cp - z1 * sp, z2 = p.n.y * sp + z1 * cp;
   return { x: x1, y: y2, z: z2 };
+}
+
+/** The body's tangent frame at a surface direction, projected: a 2×2 Jacobian plus
+ *  the anchor's screen point and facing.
+ *
+ *  Painting a flat shape through this matrix puts the shape ON the body. It
+ *  foreshortens, shears and rolls with the mesh at every yaw instead of sliding
+ *  across it as an upright screen-space ellipse — which is what made the eyes and
+ *  mouth detach from the bulb on a drag-spin. Both columns are normalised by the
+ *  body's own scale at that point, so the matrix is the identity when the anchor
+ *  faces the camera and every px size below still means what it did.
+ *
+ *  Column 1 is surface-right, column 2 is surface-DOWN — so callers keep drawing in
+ *  ordinary y-down canvas coordinates. */
+function decal(dx, dy, dz, tr, cam) {
+  const { yaw, pitch, sx, sy, R, ox, oy } = cam;
+  const n = norm(dx, dy, dz);
+  // tangent directions on the unit sphere. Degenerate only at the poles, and nothing
+  // that uses this — face, blush, mud — goes anywhere near them.
+  const u = norm(n.z, 0, -n.x);
+  const v = { x: n.y * u.z - n.z * u.y, y: n.z * u.x - n.x * u.z, z: n.x * u.y - n.y * u.x };
+  const e = 0.04;
+  // stepping through anchor() keeps all three samples exactly on the body surface
+  const at = (a, b, c) => project1(anchor(a, b, c, tr), yaw, pitch, sx, sy, R, ox, oy);
+  const P = at(n.x, n.y, n.z);
+  const Pu = at(n.x + e * u.x, n.y + e * u.y, n.z + e * u.z);
+  const Pd = at(n.x - e * v.x, n.y - e * v.y, n.z - e * v.z);
+  const [bx, by] = BODY_SHAPE[tr.bodyShape] || BODY_SHAPE.round;
+  const g = e * R * P.k;
+  return {
+    X: P.X, Y: P.Y, z: faceDir({ n }, yaw, pitch).z,
+    m: [(Pu.X - P.X) / (g * bx), (Pu.Y - P.Y) / (g * bx),
+        (Pd.X - P.X) / (g * by), (Pd.Y - P.Y) / (g * by)],
+  };
+}
+
+/** Enter a decal's surface frame. Everything drawn until restore() is painted on the
+ *  body, in px, with the origin at the anchor. */
+function onSurface(d) {
+  ctx.save();
+  ctx.transform(d.m[0], d.m[1], d.m[2], d.m[3], d.X, d.Y);
 }
 
 const veinLine = d3line().curve(curveBasis).x((d) => d.X).y((d) => d.Y);
@@ -506,14 +596,13 @@ const EYE_SCALE = {
 function drawFace(c, cam, met, sick) {
   const tr = c.traits;
   const t = T;
-  const { yaw, pitch, sx, sy, R, ox, oy } = cam;
-  const S = R / 92;
+  const S = cam.R / 92;
 
   // eyes — big round ruby buttons with a soft window-light in them ----------
   const spread = 0.34, up = 0.10;
   const eyes = [
-    anchor(-spread, up, 0.90, tr),
-    anchor(spread, up + tr.lean * 0.1, 0.90, tr),
+    [-spread, up, 0.90],
+    [spread, up + tr.lean * 0.1, 0.90],
   ];
 
   // one shared blink so they close together — staggered blinking reads wrong on
@@ -528,17 +617,16 @@ function drawFace(c, cam, met, sick) {
   const es = EYE_SCALE[tr.eyeType] || 1;
 
   eyes.forEach((e) => {
-    const d = faceDir(e, yaw, pitch);
+    const d = decal(...e, tr, cam);
     if (d.z < 0.16) return;
-    const p = project1(e, yaw, pitch, sx, sy, R, ox, oy);
+    // the frame does the foreshortening now; this is only a clean dissolve at the rim
     const fade = Math.min(1, (d.z - 0.16) / 0.25);
     const lid = Math.max(0.05, Math.min(1, restLid * bl * scene._eyeLid));
-    const rx = 11.6 * S * es * fade, ry0 = 14.6 * S * es;
+    const rx = 11.6 * S * es, ry0 = 14.6 * S * es;
     const ry = ry0 * lid;
 
-    ctx.save();
-    ctx.translate(p.X, p.Y);
-    ctx.rotate(d.x * 0.15);
+    onSurface(d);
+    ctx.globalAlpha = fade;
     if (lid < 0.22) {
       // shut: a happy little arc, not a slot
       ctx.strokeStyle = 'rgba(40,30,36,.85)';
@@ -565,27 +653,29 @@ function drawFace(c, cam, met, sick) {
   // blush — only when it's genuinely happy
   if (met.joy > 50) {
     for (const s of [-1, 1]) {
-      const a = anchor(s * 0.56, -0.12, 0.78, tr);
-      const d = faceDir(a, yaw, pitch);
+      const d = decal(s * 0.56, -0.12, 0.78, tr, cam);
       if (d.z < 0.10) continue;
-      const p = project1(a, yaw, pitch, sx, sy, R, ox, oy);
+      onSurface(d);
       ctx.fillStyle = `rgba(242,134,126,${0.22 * Math.min(1, (d.z - 0.10) / 0.2) * ((met.joy - 50) / 50)})`;
-      ctx.beginPath(); ctx.ellipse(p.X, p.Y, 7.5 * S, 4.8 * S, d.x * 0.2, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(0, 0, 7.5 * S, 4.8 * S, 0, 0, 7); ctx.fill();
+      ctx.restore();
     }
   }
 
   // mouth — a closed smile that opens into a happy "D" like the reference art -
-  const ma = anchor(0, -0.24, 0.94, tr);
-  const md = faceDir(ma, yaw, pitch);
+  const md = decal(0, -0.24, 0.94, tr, cam);
   if (md.z > 0.14) {
-    const p = project1(ma, yaw, pitch, sx, sy, R, ox, oy);
     const open = Math.max(scene._mouth,
       reduced() ? 0.16 : 0.16 + 0.05 * Math.sin(t * 0.9) + (met.joy > 60 ? 0.10 : 0));
-    const wide = 24 * S * tr.grin * Math.min(1, (md.z - 0.14) / 0.3 + 0.4);
-    const tall = (6 + open * 30) * S;
+    const wide = 24 * S * tr.grin;
+    // INVARIANT: it is always smiling. Both paths below hang their corners above a
+    // bulge that curves down, which only reads as a smile while the mouth stays wider
+    // than it is deep — so a narrow grin caps how far it can open, and a wide-open
+    // mouth on a small grin becomes a broad "D" instead of a vertical slot.
+    const tall = Math.min((6 + open * 30) * S, wide * 1.15);
 
-    ctx.save();
-    ctx.translate(p.X, p.Y);
+    onSurface(md);
+    ctx.globalAlpha = Math.min(1, (md.z - 0.14) / 0.3);   // dissolve at the rim, like the eyes
     if (open < 0.2) {
       ctx.strokeStyle = 'rgba(40,30,36,.85)';
       ctx.lineWidth = 2.4 * S; ctx.lineCap = 'round';
@@ -622,21 +712,19 @@ function drawMud(c, cam, met) {
   if (!scene.bathing && met.clean >= 65) return;
   const tr = c.traits;
   const amount = scene.bathing ? 1 : 1 - met.clean / 100;
-  const { yaw, pitch, sx, sy, R, ox, oy } = cam;
-  ctx.save();
+  const S = cam.R / 92;
   for (const m of mudSpots(c)) {
     if (m.erased) continue;
     if (m.i / mudSpots(c).length > amount + 0.15) continue;
-    const a = anchor(m.x, m.y, m.z, tr);
-    const d = faceDir(a, yaw, pitch);
+    const d = decal(m.x, m.y, m.z, tr, cam);
     if (d.z < 0.05) continue;
-    const p = project1(a, yaw, pitch, sx, sy, R, ox, oy);
+    onSurface(d);
     ctx.fillStyle = `rgba(74,52,32,${0.38 * Math.min(1, d.z * 2)})`;
     ctx.beginPath();
-    ctx.ellipse(p.X, p.Y, m.r * (R / 92), m.r * 0.72 * (R / 92), m.rot, 0, 7);
+    ctx.ellipse(0, 0, m.r * S, m.r * 0.72 * S, m.rot, 0, 7);
     ctx.fill();
+    ctx.restore();
   }
-  ctx.restore();
 }
 
 /* ---------------------------------------------------------- garnishes ---- */
@@ -1171,14 +1259,17 @@ export function portrait(c, dest, dw, dh, fieldId) {
   const prevHop = scene._hop, prevLean = scene._lean;
   ctx = tctx; T = 2; scene.spin = 0.12; scene.look = { x: 0, y: 0 }; scene._hop = 0; scene._lean = 0;
   paintWorld(tctx, fieldById(fieldId), 470, 0, true);
-  bake(c, { x: 195, y: 790, scale: 1.3 }, { meters: c.meters });
+  bake(c, { x: 195, y: 779, scale: 1.0 }, { meters: c.meters });
   ctx = prev; T = prevT; scene.spin = prevSpin; scene.look = prevLook;
   scene._hop = prevHop; scene._lean = prevLean;
   const sy = 300, sh = 487;                          // 390:487 ≈ 4:5
   dest.drawImage(tmp, 0, sy * DPR, W * DPR, sh * DPR, 0, 0, dw, dh);
 }
 
-const SPRITE_W = 230, SPRITE_H = 270;
+// The bitmap is bottom-anchored when it's drawn, so the height is pure headroom for
+// the crown — it has to clear the tallest bouquet a genome can roll or the collection
+// grid bakes flat-topped leaves.
+const SPRITE_W = 230, SPRITE_H = 320;
 
 /** ponytail: collection creatures render once to a bitmap and then just bob.
  *  Full per-creature meshes at 12+ on screen is the one thing that will not hold. */
