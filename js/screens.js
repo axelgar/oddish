@@ -299,16 +299,18 @@ export function b1() {
 
 function dragToCare(root) {
   const dock = $('#dock', root); if (!dock) return () => {};
-  let y0 = null;
+  let y0 = null, pid = null;
   // a mouse drag starting on the grab handle exits the dock ~18px before the threshold,
   // so the move has to be tracked on the window. Capturing the pointer on #dock would
   // also work, but it retargets the tap's click to #dock and the tiles stop navigating.
+  // pid, because the capture used to bind the gesture to one pointer and no longer does —
+  // without it a second finger anywhere on screen drags the dock open.
   const move = (e) => {
-    if (y0 == null) return;
+    if (y0 == null || e.pointerId !== pid) return;
     if (y0 - e.clientY > 34) { y0 = null; buzz(6); location.hash = '#/care'; }
   };
-  const end = () => { y0 = null; };
-  dock.addEventListener('pointerdown', (e) => { y0 = e.clientY; });
+  const end = (e) => { if (e.pointerId === pid) y0 = null; };
+  dock.addEventListener('pointerdown', (e) => { y0 = e.clientY; pid = e.pointerId; });
   window.addEventListener('pointermove', move);
   window.addEventListener('pointerup', end);
   window.addEventListener('pointercancel', end);
