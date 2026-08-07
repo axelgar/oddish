@@ -6,7 +6,6 @@ import * as Screens from './screens.js';
 
 const ui = document.getElementById('ui');
 const stage = document.getElementById('stage');
-const tear = document.getElementById('tear');
 
 const hasGL = R.mount(
   document.getElementById('scene'),
@@ -80,25 +79,6 @@ document.addEventListener('click', (e) => {
   location.hash = t.dataset.go;
 });
 
-/* ------------------------------------------------------------- the glitch -- */
-
-function scheduleGlitch() {
-  // rare enough to be a wink, never a stutter
-  const wait = 10000 + Math.random() * 12000;
-  setTimeout(() => {
-    if (!S.session.reduceMotion) {
-      const ms = 90 + Math.random() * 90;
-      R.glitch(ms);
-      tear.style.setProperty('--ty', `${20 + Math.random() * 55}%`);
-      tear.classList.add('on');
-      setTimeout(() => tear.classList.remove('on'), ms);
-      Screens.buzz(3);
-    }
-    scheduleGlitch();
-  }, wait);
-}
-scheduleGlitch();
-
 /* ----------------------------------------------------------------- audio -- */
 // ponytail: synthesised, not sampled. Zero assets, and a detuned drone is
 // creepier than anything I'd have licensed. Swap for per-field loops later.
@@ -148,11 +128,6 @@ addEventListener('resize', fit);
 fit();
 
 /* ------------------------------------------------------------------ boot -- */
-
-const clock = document.getElementById('statusbar').firstElementChild;
-const tickClock = () => { clock.textContent = new Date().toTimeString().slice(0, 5); };
-tickClock();
-setInterval(tickClock, 30000);
 
 if (!location.hash) {
   // No tag scanned. With creatures → home. Fresh device → mint a demo egg so the

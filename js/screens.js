@@ -16,7 +16,6 @@ const nameOf = (c) => esc(c?.name || 'it');
 const topbar = (c) => `
   <div class="top">
     <button class="chip" data-go="#/c/${c.id}">${nameOf(c)}</button>
-    <span class="mark" style="opacity:.75">GLITCH</span>
     <button class="chip" data-go="#/field"><i style="width:9px;height:12px;border-radius:50%;background:#cbb193;display:block"></i>${S.session.creatures.length}</button>
   </div>`;
 

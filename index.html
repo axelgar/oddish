@@ -29,7 +29,7 @@
 
 <div class="stagewrap">
   <div class="stage" id="stage">
-    <!-- world → creature → overlay. Same stacking the fog/vig/grain/tear layers use. -->
+    <!-- world → creature → overlay. Same stacking the fog/vig/grain layers use. -->
     <canvas id="scene" aria-hidden="true"></canvas>
     <canvas id="scene-gl" aria-hidden="true"></canvas>
     <canvas id="scene-fx" aria-hidden="true"></canvas>
@@ -37,12 +37,10 @@
          PLANS/ODDISH_WEBGL_RENDERER_V1.md open question 3 has it unwritten. -->
     <div class="nogl" id="nogl" role="status">This creature needs a browser that can draw
       3D. Try Safari or Chrome, or turn hardware acceleration back on.</div>
-    <div class="statusbar mono" id="statusbar"><span>9:41</span><span>▮▮▮</span></div>
     <main id="ui" class="ui"></main>
     <div class="fog" aria-hidden="true"></div>
     <div class="vig" aria-hidden="true"></div>
     <div class="grain" aria-hidden="true"></div>
-    <div class="tear" id="tear" aria-hidden="true"></div>
   </div>
 </div>
 
