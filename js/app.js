@@ -135,7 +135,14 @@ function fit() {
   stage.style.transform = `scale(${s})`;
   document.querySelector('.stagewrap').style.height = `${844 * s}px`;
   document.querySelector('.stagewrap').style.width = `${390 * s}px`;
-  stage.style.transformOrigin = '50% 0';
+  // top-LEFT, so the scaled box lands exactly on the wrapper that is sized to hold it.
+  // About 50% it shrank toward its own centre while the wrapper stayed put, leaving the
+  // stage ~42px right of centre — visible as a fatter letterbox strip on the left.
+  stage.style.transformOrigin = '0 0';
+  // Whatever the scale leaves over at the sides, the world paints into — so the
+  // backdrop runs edge to edge instead of sitting in a letterbox. Desktop keeps the
+  // phone frame, so it gets none.
+  R.setBleed(mobile ? (window.innerWidth / s - 390) / 2 : 0);
 }
 addEventListener('resize', fit);
 fit();

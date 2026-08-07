@@ -63,6 +63,15 @@ let ctx, wctx, fctx, glcv, hasGL = false, clock = null, t0 = performance.now() /
 let worldCache = null, worldKey = '';
 const spriteCache = new Map();
 
+/* The stage is a fixed 390×844 that scales as one unit and never reflows. On a phone
+   whose viewport is proportionally wider than that — Safari's chrome eats the height,
+   so the stage ends up height-limited — it leaves letterbox strips down both sides.
+   BX is how far past the column the WORLD is painted so the scenery reaches the screen
+   edges instead. Only the backdrop widens: the creature, the props and every bit of UI
+   stay in the 390 they were designed in, so nothing is cropped or re-laid-out. */
+let BX = 0;
+let worldCanvas = null;
+
 function layer(canvas) {
   canvas.width = W * DPR; canvas.height = H * DPR;
   const c = canvas.getContext('2d');
@@ -70,9 +79,33 @@ function layer(canvas) {
   return c;
 }
 
+/** Widens the world layer so it spills `px` beyond each side of the column. The
+ *  context is translated to match, so every drawing call still works in stage
+ *  coordinates and nothing downstream has to know this happened. */
+function sizeWorld() {
+  worldCanvas.width = (W + 2 * BX) * DPR;
+  worldCanvas.height = H * DPR;
+  worldCanvas.style.left = `${-BX}px`;
+  worldCanvas.style.right = `${-BX}px`;
+  worldCanvas.style.width = 'auto';
+  wctx = worldCanvas.getContext('2d');
+  wctx.setTransform(DPR, 0, 0, DPR, BX * DPR, 0);
+}
+
+/** Called by the fitter, which is the only thing that knows the viewport. */
+export function setBleed(px) {
+  const v = Math.max(0, Math.min(300, Math.ceil(px)));
+  if (v === BX || !worldCanvas) return;
+  BX = v;
+  sizeWorld();
+  worldKey = '';                       // the cached world is the wrong width now
+  document.documentElement.style.setProperty('--bx', `${BX}px`);
+}
+
 /** Returns false when the device has no WebGL. There is no second renderer to fall
  *  back to — the caller says so honestly and nothing else runs. */
 export function mount(world, creature, overlay) {
+  worldCanvas = world;
   wctx = layer(world);
   fctx = layer(overlay);
   glcv = creature;
@@ -83,7 +116,7 @@ export function mount(world, creature, overlay) {
     onLost: () => {
       clock?.stop(); clock = null;
       fctx.clearRect(0, 0, W, H);
-      ctx = wctx; wctx.clearRect(0, 0, W, H);
+      ctx = wctx; wctx.clearRect(-BX, 0, W + 2 * BX, H);
       if (!scene.hidden) drawWorld(); else drawFlat();
     },
     onRestored: () => { meshCache.clear(); spriteCache.clear(); bakeTries.clear(); clock ??= timer(loop); },
@@ -1678,16 +1711,16 @@ function eggOver(st) {
 /* ---------------------------------------------------------------- world --- */
 
 function drawWorld() {
-  const key = `${scene.field}|${scene.groundTop}|${Math.round(scene.decay * 4)}|${scene.props}`;
+  const key = `${scene.field}|${scene.groundTop}|${Math.round(scene.decay * 4)}|${scene.props}|${BX}`;
   if (worldKey !== key) {
     worldKey = key;
     worldCache = document.createElement('canvas');
-    worldCache.width = W * DPR; worldCache.height = H * DPR;
+    worldCache.width = (W + 2 * BX) * DPR; worldCache.height = H * DPR;
     const c = worldCache.getContext('2d');
-    c.scale(DPR, DPR);
+    c.setTransform(DPR, 0, 0, DPR, BX * DPR, 0);
     paintWorld(c, fieldById(scene.field), scene.groundTop, scene.decay, scene.props);
   }
-  ctx.drawImage(worldCache, 0, 0, W, H);
+  ctx.drawImage(worldCache, -BX, 0, W + 2 * BX, H);
 }
 
 function desat(hex, amt) {
@@ -1703,9 +1736,12 @@ function desat(hex, amt) {
 
 function paintWorld(c, f, groundTop, decay, props) {
   const d = decay * 0.85;
+  // the backdrop runs from L to R, which is wider than the column on a phone; the
+  // props below stay where they were placed, inside it
+  const L = -BX, R2 = W + BX, RW = W + 2 * BX;
   const sky = c.createLinearGradient(0, 0, 0, H);
   f.sky.forEach((s, i) => sky.addColorStop(f.skyStops[i], desat(s, d)));
-  c.fillStyle = sky; c.fillRect(0, 0, W, H);
+  c.fillStyle = sky; c.fillRect(L, 0, RW, H);
 
   // sun / moon bloom. Both stops MUST share the RGB — canvas interpolates rgba
   // un-premultiplied, so fading to rgba(0,0,0,0) drags the halo through grey.
@@ -1721,22 +1757,22 @@ function paintWorld(c, f, groundTop, decay, props) {
     c.beginPath(); c.arc(cx, cyy, 26, 0, 7); c.fill();
   }
 
-  // hills
+  // hills — each grown outward so its far edge clears the bleed, inner edge unmoved
   c.fillStyle = desat(f.hills[0], d);
-  c.beginPath(); c.ellipse(-90 + 195, groundTop - 12 + 103, 195, 103, 0, 0, 7); c.fill();
+  c.beginPath(); c.ellipse(105 - BX / 2, groundTop - 12 + 103, 195 + BX / 2, 103, 0, 0, 7); c.fill();
   c.fillStyle = desat(f.hills[1], d);
-  c.beginPath(); c.ellipse(W + 110 - 205, groundTop + 6 + 107, 205, 107, 0, 0, 7); c.fill();
+  c.beginPath(); c.ellipse(295 + BX / 2, groundTop + 6 + 107, 205 + BX / 2, 107, 0, 0, 7); c.fill();
 
   // treeline — a black jag at the horizon. Not in the mocks.
   c.fillStyle = f.treeline;
   c.beginPath();
-  c.moveTo(0, groundTop + 8);
-  for (let x = 0; x <= W; x += 17) {
+  c.moveTo(L, groundTop + 8);
+  for (let x = L; x <= R2; x += 17) {
     const h = 30 + 56 * Math.abs(noise3(x * 0.04, 3, 1, 21)) + 96 * Math.pow(Math.abs(noise3(x * 0.011, 9, 1, 4)), 4);
     c.lineTo(x, groundTop + 8 - h);
     c.lineTo(x + 8.5, groundTop + 8 - h * 0.34);
   }
-  c.lineTo(W, groundTop + 10); c.closePath(); c.fill();
+  c.lineTo(R2, groundTop + 10); c.closePath(); c.fill();
 
   // eyes in the treeline
   if (f.watchers) {
@@ -1753,13 +1789,14 @@ function paintWorld(c, f, groundTop, decay, props) {
   gr.addColorStop(0, desat(f.ground[0], d));
   gr.addColorStop(0.4, desat(f.ground[1], d));
   gr.addColorStop(1, desat(f.ground[2], d));
-  c.fillStyle = gr; c.fillRect(0, groundTop, W, H - groundTop);
+  c.fillStyle = gr; c.fillRect(L, groundTop, RW, H - groundTop);
 
   // grass streaks, and dust patches when decayed
-  for (let i = 0; i < 150; i++) {
-    const t = i / 150;
+  const blades = Math.round(150 * RW / W);
+  for (let i = 0; i < blades; i++) {
+    const t = (i % 150) / 150;
     const y = groundTop + 10 + t * (H - groundTop);
-    const x = ((i * 137.5) % W);
+    const x = L + ((i * 137.5) % RW);
     c.strokeStyle = `rgba(0,0,0,${0.05 + t * 0.07})`;
     c.lineWidth = 1 + t * 1.6;
     c.beginPath(); c.moveTo(x, y); c.lineTo(x + 3 - t * 6, y - 6 - t * 9); c.stroke();
@@ -2035,7 +2072,7 @@ function loop() {
   T = now - t0;
   if (!wctx) return;
 
-  wctx.clearRect(0, 0, W, H);
+  wctx.clearRect(-BX, 0, W + 2 * BX, H);
   fctx.clearRect(0, 0, W, H);
   ctx = wctx;
   if (scene.hidden) { GL.frame(); drawFlat(); return; }
@@ -2086,7 +2123,7 @@ function loop() {
 function drawFlat() {
   const f = fieldById(scene.field);
   ctx.fillStyle = f.dark ? '#16211E' : '#FFFDF5';
-  ctx.fillRect(0, 0, W, H);
+  ctx.fillRect(-BX, 0, W + 2 * BX, H);
 }
 
 /* creature ambles the plane, retargeting every 4–9s. It steers the pose TARGET
