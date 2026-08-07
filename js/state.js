@@ -52,8 +52,11 @@ export const BODIES = ['round', 'swollen', 'tall', 'lopsided'];
 // same roll index as the old ['slit','pinhole','wide','too many'] — render.js keeps
 // legacy fallbacks so creatures hatched before the rename still draw
 export const EYES = ['button', 'round', 'wide', 'sparkly'];
-export const BERRIES = ['#D9556E', '#F0C65A', '#8FBF6A'];
-export const BERRY_NAMES = ['sourberry', 'wax plum', 'greenpit'];
+// Index order is the genome's favouriteBerry, so it must never be reshuffled —
+// a creature that liked #1 yesterday has to still like the same fruit today.
+export const BERRY_KINDS = ['blueberry', 'strawberry', 'blackberry'];
+export const BERRIES = ['#4258A2', '#D42F44', '#3B2352'];   // the flat swatch, for the bush
+export const BERRY_NAMES = ['blueberries', 'strawberries', 'blackberries'];
 
 const NAME_POOL = {
   drowned: ['Puddle', 'Marlow', 'Dew', 'Blue', 'Pips'],

@@ -358,6 +358,207 @@ function leafMesh(k, n, tr, seed, droop) {
   return { verts, quads, spine };
 }
 
+/* ---------------------------------------------------------------- berries -- */
+
+/** A lat-long blob. `shape(ny, th)` scales the unit sphere per vertex, so one
+ *  generator covers a plump blueberry, a tapered strawberry and one drupelet. */
+function blobMesh(seg, ring, shape) {
+  const verts = [], quads = [];
+  for (let j = 0; j <= ring; j++) {
+    const phi = (j / ring) * Math.PI;
+    for (let i = 0; i <= seg; i++) {
+      const th = (i / seg) * Math.PI * 2;
+      const nx = Math.sin(phi) * Math.cos(th), ny = Math.cos(phi), nz = Math.sin(phi) * Math.sin(th);
+      const s = shape(ny, th, nx, nz);
+      verts.push({ x: nx * s.r * (s.sx ?? 1), y: ny * s.r * (s.sy ?? 1) + (s.dy ?? 0), z: nz * s.r * (s.sx ?? 1) });
+    }
+  }
+  const idx = (i, j) => j * (seg + 1) + i;
+  for (let j = 0; j < ring; j++) for (let i = 0; i < seg; i++)
+    quads.push([idx(i, j), idx(i + 1, j), idx(i + 1, j + 1), idx(i, j + 1)]);
+  return { verts, quads };
+}
+
+const shift = (m, dx, dy, dz, k = 1) => ({
+  verts: m.verts.map((v) => ({ x: v.x * k + dx, y: v.y * k + dy, z: v.z * k + dz })),
+  quads: m.quads,
+});
+
+/** The little green star on top of a blueberry and the leaves on a strawberry —
+ *  flat tapered blades on a ring, tilted out from the stem. */
+function calyx(n, len, wide, tilt, lift) {
+  const parts = [];
+  for (let k = 0; k < n; k++) {
+    const a = (k / n) * Math.PI * 2;
+    const ca = Math.cos(a), sa = Math.sin(a);
+    const ct = Math.cos(tilt), st = Math.sin(tilt);
+    const verts = [], quads = [];
+    const SEGS = 4;
+    for (let s = 0; s <= SEGS; s++) {
+      const t = s / SEGS;
+      const w = wide * Math.sin(Math.PI * Math.pow(t, 0.7)) + 0.008;
+      for (const side of [-1, 1]) for (const up of [-1, 1]) {
+        // blade-local: x across, y along, z thickness
+        const bx = side * w, by = t * len, bz = up * 0.022;
+        const y2 = by * ct - bz * st, z2 = by * st + bz * ct;      // tilt outward
+        verts.push({ x: bx * ca - y2 * sa, y: z2 + lift, z: bx * sa + y2 * ca });
+      }
+    }
+    // 4 verts per rung: [-1,-1], [-1,1], [1,-1], [1,1] → wrap them as a tube
+    const RING = [0, 1, 3, 2];
+    for (let s = 0; s < SEGS; s++) for (let e = 0; e < 4; e++) {
+      const a0 = s * 4 + RING[e], a1 = s * 4 + RING[(e + 1) % 4];
+      quads.push([a0, a1, a1 + 4, a0 + 4]);
+    }
+    parts.push({ verts, quads });
+  }
+  return merge(parts);
+}
+
+/** Three berries, each a real mesh in the same unit space as everything else:
+ *  radius ≈ 1 around the origin, +y up. Returns the parts by material. */
+function berryMesh(kind) {
+  if (kind === 'blueberry') {
+    // plump and slightly squat, with the crown pressed in — that dimple plus the
+    // dry calyx star is the whole reason a blueberry doesn't read as a marble
+    const body = blobMesh(22, 16, (ny) => ({
+      r: 1 - 0.16 * Math.max(0, (ny - 0.55) / 0.45) ** 2 * 3,
+      sy: 0.88,
+    }));
+    // the pole sits at 0.46 while the shoulder bulges to 0.60 — the star rings that
+    // sunken crown, angled up and out so it stays proud of the shoulder
+    return { body, leaf: calyx(6, 0.36, 0.09, 1.02, 0.54) };
+  }
+  if (kind === 'strawberry') {
+    // wide shoulders tapering to a soft point. Seeds are dimples in the surface,
+    // not decals — they catch the key light along the shoulder.
+    const body = blobMesh(30, 24, (ny, th) => {
+      const t = (1 - ny) / 2;                                  // 0 top → 1 bottom
+      const taper = 0.62 + 0.72 * Math.sin(Math.PI * Math.pow(t, 0.62));
+      const pit = 0.045 * Math.max(0, Math.sin(th * 8 + ny * 13)) * Math.max(0, Math.sin(Math.PI * t));
+      return { r: taper - pit, sy: 1.30 / taper * 0.86, dy: 0.06 };
+    });
+    // the hull is the whole silhouette cue, so it splays wide over the shoulders
+    // rather than tufting up: low tilt, long blades, sat at the top of the body.
+    return { body, leaf: calyx(7, 0.80, 0.20, 0.55, 1.02) };
+  }
+  // blackberry: an aggregate, the way the real thing is — a core hidden under a
+  // shell of drupelets. Fibonacci placement, or the clumps line up in visible rows.
+  const drupe = blobMesh(9, 7, () => ({ r: 1 }));
+  const N = 26, GOLD = Math.PI * (3 - Math.sqrt(5));
+  const parts = [blobMesh(14, 10, () => ({ r: 0.76, sy: 1.18 }))];
+  for (let i = 0; i < N; i++) {
+    const y = 1 - (i / (N - 1)) * 1.72;                        // -0.72 … 1, top-heavy
+    const rad = Math.sqrt(Math.max(0, 1 - y * y));
+    const a = i * GOLD;
+    parts.push(shift(drupe, Math.cos(a) * rad * 0.74, y * 0.92, Math.sin(a) * rad * 0.74, 0.30));
+  }
+  return { body: merge(parts), leaf: calyx(5, 0.36, 0.10, 0.62, 1.08) };
+}
+
+const BERRY_SKIN = {
+  blueberry:  { deep: '#141F44', body: '#4258A2', hi: '#A9BCEA' },
+  strawberry: { deep: '#66101F', body: '#D42F44', hi: '#FF9A9A' },
+  blackberry: { deep: '#100A18', body: '#3B2352', hi: '#8B6BA8' },
+};
+const BERRY_LEAF = { deep: '#1B3A20', body: '#4E8C3E', hi: '#9BCB72' };
+
+/** The play ball: a sphere wearing two crossed seams. The seams are separate shells
+ *  a hair proud of the surface, which is what makes it read as a toy and not a dot. */
+function ballMesh() {
+  const body = blobMesh(24, 18, () => ({ r: 1 }));
+  // a band hugging one great circle. `pole` is the axis the circle is normal to.
+  const seam = (pole) => {
+    const e1 = pole === 'y' ? { x: 1, y: 0, z: 0 } : { x: 0, y: 1, z: 0 };
+    const e2 = { x: 0, y: 0, z: 1 };
+    const n = pole === 'y' ? { x: 0, y: 1, z: 0 } : { x: 1, y: 0, z: 0 };
+    const U = 30, V = 3, HW = 0.15, RR = 1.035;
+    const verts = [], quads = [];
+    for (let i = 0; i <= U; i++) {
+      const u = (i / U) * Math.PI * 2, cu = Math.cos(u), su = Math.sin(u);
+      for (let j = 0; j <= V; j++) {
+        const v = (j / V) * 2 * HW - HW, cv = Math.cos(v), sv = Math.sin(v);
+        verts.push({
+          x: RR * (cv * (cu * e1.x + su * e2.x) + sv * n.x),
+          y: RR * (cv * (cu * e1.y + su * e2.y) + sv * n.y),
+          z: RR * (cv * (cu * e1.z + su * e2.z) + sv * n.z),
+        });
+      }
+    }
+    const idx = (i, j) => i * (V + 1) + j;
+    for (let i = 0; i < U; i++) for (let j = 0; j < V; j++)
+      quads.push([idx(i, j), idx(i, j + 1), idx(i + 1, j + 1), idx(i + 1, j)]);
+    return { verts, quads };
+  };
+  return { body, seam: merge([seam('y'), seam('x')]) };
+}
+
+const BALL_SKIN = { deep: '#7A2410', body: '#E2683A', hi: '#FFD0A8' };
+const BALL_SEAM = { deep: '#7E7259', body: '#FFFDF5', hi: '#FFFFFF' };
+
+const propCache = new Map();
+const propMeshCache = new Map();
+
+/** Bakes a small prop to a square canvas through the live GL context, the same way
+ *  sprite() bakes a creature. Cached — a button never redraws. Returns null when the
+ *  context is missing or dying, so the caller can retry later. */
+function bakeProp(key, px, pitch, build) {
+  const ck = `${key}|${px}`;
+  if (propCache.has(ck)) return propCache.get(ck);
+  if (!hasGL || GL.lost) return null;
+
+  if (!propMeshCache.has(key)) propMeshCache.set(key, build());
+  const parts = propMeshCache.get(key);
+
+  // Its own little camera: the prop sits at the centre of the full-size GL canvas
+  // and only that square gets copied out.
+  const cam = { yaw: 0.55, pitch, sx: 1, sy: 1, R: px * 0.40, ox: W / 2, oy: H / 2, focal: FOCAL, roll: 0 };
+  GL.frame();
+  for (const p of parts)
+    GL.draw(GL.mesh(`${key}|${p.name}`, () => p.mesh), cam,
+      { ramp: ramp(p.skin.deep, p.skin.body, p.skin.hi), gloss: p.gloss, sick: 0, key: KEY, fill: FILL });
+  GL.sync();                        // resolve MSAA before the readback (iOS)
+
+  const cv = document.createElement('canvas');
+  cv.width = px * DPR; cv.height = px * DPR;
+  const c2 = cv.getContext('2d');
+  const half = (px / 2) * DPR;
+  c2.drawImage(glcv, W / 2 * DPR - half, H / 2 * DPR - half,
+    px * DPR, px * DPR, 0, 0, px * DPR, px * DPR);
+  // A wholly empty bake means the context was not ready — don't cache it, ask again.
+  // Scan every pixel, not the centre one: a prop with a gap up the middle (two
+  // antenna stalks, say) is not the same thing as a prop that failed to draw.
+  const px4 = c2.getImageData(0, 0, cv.width, cv.height).data;
+  let inked = false;
+  for (let i = 3; i < px4.length; i += 4) if (px4[i]) { inked = true; break; }
+  if (!inked) return null;
+  propCache.set(ck, cv);
+  return cv;
+}
+
+export function berrySprite(kind, px = 132) {
+  const skin = BERRY_SKIN[kind] || BERRY_SKIN.blueberry;
+  // looking slightly down on it — the crown and its calyx are the identifying detail
+  // on two of the three, and a level camera hides both behind the shoulder
+  return bakeProp(`berry|${kind}`, px, 0.30, () => {
+    const m = berryMesh(kind);
+    return [
+      { name: 'body', mesh: m.body, skin, gloss: kind === 'strawberry' ? 0.5 : 0.62 },
+      { name: 'leaf', mesh: m.leaf, skin: BERRY_LEAF, gloss: 0.2 },
+    ];
+  });
+}
+
+export function ballSprite(px = 132) {
+  return bakeProp('ball', px, 0.10, () => {
+    const m = ballMesh();
+    return [
+      { name: 'body', mesh: m.body, skin: BALL_SKIN, gloss: 0.78 },
+      { name: 'seam', mesh: m.seam, skin: BALL_SEAM, gloss: 0.5 },
+    ];
+  });
+}
+
 function eggMesh(seed) {
   const verts = [], quads = [], seg = 16, ring = 12;
   for (let j = 0; j <= ring; j++) {
@@ -1211,7 +1412,7 @@ const FX_COLOR = {
   dust: '#9A8E6E', petal: '#C98A5E', bubble: 'rgba(255,255,255,.75)',
 };
 
-const SEED_G = 760;
+const BALL_G = 760;
 
 function drawFx(dt) {
   const keep = [];
@@ -1219,15 +1420,25 @@ function drawFx(dt) {
     p.age += dt;
     if (p.age > p.life) { p.onEnd?.(); continue; }
     p.x += p.vx * dt; p.y += p.vy * dt;
-    p.vy += (p.type === 'seed' ? SEED_G : p.type === 'spark' || p.type === 'heart' ? -40 : 240) * dt;
-    if (p.type === 'seed') {
-      // it watches the seed all the way in
+    p.vy += (p.type === 'ball' ? BALL_G : p.type === 'spark' || p.type === 'heart' ? -40 : 240) * dt;
+    if (p.type === 'ball') {
+      // it watches the ball all the way in
       scene.look.x = Math.max(-1, Math.min(1, (p.x - scene.pose.x) / 150));
       scene.look.y = Math.max(-1, Math.min(1, (p.y - bodyCentreY()) / 150));
-      ctx.fillStyle = '#7FB35C';
-      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 7); ctx.fill();
-      ctx.fillStyle = 'rgba(255,255,255,.55)';
-      ctx.beginPath(); ctx.arc(p.x - p.r * .3, p.y - p.r * .35, p.r * .34, 0, 7); ctx.fill();
+      // tumbles at the speed it is travelling, leaning whichever way it was thrown.
+      // Off vx alone a straight-up flick — which is the one the screen asks for —
+      // would sail up without turning at all.
+      p.spin = (p.spin || 0) + Math.sign(p.vx || 1) * Math.hypot(p.vx, p.vy) / 130 * dt;
+      const img = ballSprite();
+      if (img) {
+        ctx.save();
+        ctx.translate(p.x, p.y); ctx.rotate(p.spin);
+        ctx.drawImage(img, -p.r, -p.r, p.r * 2, p.r * 2);
+        ctx.restore();
+      } else {                                  // context not ready — never nothing
+        ctx.fillStyle = '#E2683A';
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.r * 0.7, 0, 7); ctx.fill();
+      }
       keep.push(p);
       continue;
     }
@@ -1252,7 +1463,7 @@ function drawFx(dt) {
 /** B5 — lob a seed from the tray toward the creature (or short, on a weak flick).
  *  Solved for a fixed flight time, so the catch lands exactly when the arc does.
  *  Returns the flight time in ms; the caller scores/reacts on that clock. */
-export function throwSeed(vel, good) {
+export function throwBall(vel, good) {
   if (reduced()) {
     if (good) { chew(0.6); emit('heart', 4); }
     return 0;
@@ -1262,10 +1473,10 @@ export function throwSeed(vel, good) {
   const ty = good ? bodyCentreY() - 6 : scene.pose.y - 6;
   const tf = good ? Math.max(0.5, 0.78 - Math.min(vel, 1600) / 6000) : 0.5;
   scene.fx.push({
-    type: 'seed', x: x0, y: y0,
+    type: 'ball', x: x0, y: y0,
     vx: (tx - x0) / tf,
-    vy: (ty - y0) / tf - 0.5 * SEED_G * tf,
-    life: tf, age: 0, r: 5.5,
+    vy: (ty - y0) / tf - 0.5 * BALL_G * tf,
+    life: tf, age: 0, r: 15, spin: 0,
     onEnd() {
       if (good) {
         squash(0.20, 0.6); chew(0.7); wiggle(0.5);

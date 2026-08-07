@@ -429,7 +429,6 @@ export function b3() {
   const c = S.view(raw);
   R.set({ mode: 'creature', creature: c, field: S.session.activeFieldId, groundTop: 404, props: true,
     hidden: false, wander: false, pose: { x: 195, y: 700, scale: 1.06 } });
-  const unlocked = S.session.creatures.length >= 5;
   const html = `
     <div class="screen">
       ${actionTop('FEEDING')}
@@ -443,21 +442,42 @@ export function b3() {
       <div class="actionbar">
         <div class="progress"><i id="fed" style="width:${c.meters.hunger}%"></i></div>
         <div class="row" style="justify-content:center">
-          ${S.BERRIES.map((col, i) => `<button class="orb berry" data-i="${i}" style="background:${col}" aria-label="${S.BERRY_NAMES[i]}"></button>`).join('')}
-          <div class="orb locked" title="${unlocked ? 'Treat' : 'Unlocks at 5 hatches'}">${unlocked ? '★' : '?'}</div>
+          ${S.BERRY_KINDS.map((kind, i) => `<button class="orb prop berry" data-i="${i}" data-kind="${kind}" aria-label="${S.BERRY_NAMES[i]}"></button>`).join('')}
         </div>
       </div>
     </div>`;
 
   function mount(root) {
     const bar = $('#fed', root);
-    $$('.berry', root).forEach((b) => {
+    const buttons = $$('.berry', root);
+
+    // The berries are real geometry, baked once through the same GL context the
+    // creature uses — which means the bake scribbles over the live creature frame.
+    // Do it in a plain task, never in rAF: the render loop's own rAF then clears and
+    // redraws before the browser paints, so the scribble is never composited. A
+    // retry (context mid-restore) stays on setTimeout for exactly the same reason.
+    let paint = 0;
+    const fill = () => {
+      const left = buttons.filter((b) => {
+        const cv = R.berrySprite(b.dataset.kind);
+        if (!cv) return true;
+        cv.style.cssText = 'width:60px;height:60px;display:block';
+        if (b.firstChild) b.replaceChild(cv, b.firstChild); else b.append(cv);
+        return false;
+      });
+      if (left.length) paint = setTimeout(fill, 120);
+    };
+    fill();
+
+    buttons.forEach((b) => {
       b.addEventListener('pointerdown', (e) => {
         e.preventDefault();
         const i = +b.dataset.i;
-        const ghost = document.createElement('button');
+        const ghost = document.createElement('div');
         ghost.className = 'orb drag';
-        ghost.style.background = b.style.background;
+        const baked = R.berrySprite(b.dataset.kind);
+        if (baked) { const g = baked.cloneNode(); g.getContext('2d').drawImage(baked, 0, 0);
+          g.style.cssText = 'width:60px;height:60px;display:block'; ghost.append(g); }
         document.body.append(ghost);
         const at = (ev) => { ghost.style.transform = `translate(${ev.clientX}px,${ev.clientY}px)`; };
         at(e);
@@ -490,6 +510,7 @@ export function b3() {
         window.addEventListener('pointercancel', cancel);
       });
     });
+    return () => clearTimeout(paint);
   }
   return { html, mount };
 }
@@ -575,14 +596,14 @@ export function b5() {
     <div class="screen">
       ${actionTop('PLAYING')}
       <div class="hd" style="top:132px">
-        <div class="disp" style="font-size:30px">Flick a seed</div>
+        <div class="disp" style="font-size:30px">Flick the ball</div>
         <div class="mono" style="font-size:11px;opacity:.55;margin-top:10px">HARDER THROWS GO FURTHER</div>
       </div>
       <div style="position:absolute;right:24px;top:118px;z-index:6"><span class="chip mono" id="streak" style="font-size:12px">0 ×</span></div>
       <div id="praise" style="position:absolute;left:50%;transform:translateX(-50%);top:300px;z-index:7;opacity:0;transition:opacity 200ms">
         <span class="chip" style="background:#FFFDF5">good one</span></div>
       <div class="actionbar"><div class="row" style="justify-content:center">
-        <button class="orb" id="seed" style="background:#8FBF6A"></button></div>
+        <button class="orb prop" id="seed"></button></div>
         <div class="note" style="text-align:center;margin-top:12px">FLICK UPWARD</div>
       </div>
     </div>`;
@@ -590,6 +611,18 @@ export function b5() {
   function mount(root) {
     const seed = $('#seed', root), streakEl = $('#streak', root), praise = $('#praise', root);
     let streak = 0;
+
+    // same deal as the berries: bake in a plain task so the render loop's rAF clears
+    // the scribble off the shared GL canvas before the browser ever paints it
+    let paint = 0;
+    const fill = () => {
+      const cv = R.ballSprite();
+      if (!cv) { paint = setTimeout(fill, 120); return; }
+      cv.style.cssText = 'width:60px;height:60px;display:block';
+      if (seed.firstChild) seed.replaceChild(cv, seed.firstChild); else seed.append(cv);
+    };
+    fill();
+
     seed.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       const y0 = e.clientY;
@@ -607,7 +640,7 @@ export function b5() {
         cancel();
         const good = vel > 420 && y0 - last.y > 14;   // fast AND upward — the note means it
         // the seed really flies; score, praise and the catch all land when it does
-        const ms = R.throwSeed(vel, good);
+        const ms = R.throwBall(vel, good);
         buzz(4);
         setTimeout(() => {
           if (good) {
@@ -624,6 +657,7 @@ export function b5() {
       window.addEventListener('pointerup', up);
       window.addEventListener('pointercancel', cancel);
     });
+    return () => clearTimeout(paint);
   }
   return { html, mount };
 }
