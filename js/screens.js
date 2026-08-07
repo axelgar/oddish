@@ -628,9 +628,14 @@ export function b5() {
       const y0 = e.clientY;
       let last = { x: e.clientX, y: e.clientY, t: performance.now() }, vel = 0;
       const move = (ev) => {
-        const dt = performance.now() - last.t || 1;
-        vel = Math.hypot(ev.clientX - last.x, ev.clientY - last.y) / dt * 1000;
-        last = { x: ev.clientX, y: ev.clientY, t: performance.now() };
+        const now = performance.now();
+        // dt floored: coalesced moves can arrive 0-1ms apart and read as 14000px/s
+        const dt = Math.max(now - last.t, 6);
+        // the PEAK of the flick, not the last sample. A hand always settles before it
+        // lets go, so the final segment is near-zero however hard the throw was —
+        // reading only that made a good flick score 3 and fail.
+        vel = Math.max(vel, Math.hypot(ev.clientX - last.x, ev.clientY - last.y) / dt * 1000);
+        last = { x: ev.clientX, y: ev.clientY, t: now };
       };
       const cancel = () => {
         window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up);
