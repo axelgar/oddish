@@ -47,9 +47,23 @@ const ROUTES = [
 ];
 
 let teardown = null;
+let here = null;                              // the path currently on screen
 
 function render() {
   const path = (location.hash.replace(/^#/, '') || '/').replace(/\/+$/, '') || '/';
+
+  // Where we came from, recorded before the screen is built so it can read it while
+  // assembling its markup. Only on a REAL move: screens re-render themselves in place
+  // through hashchange (the dress tabs, the collection sort), and counting those would
+  // set a screen's referrer to itself — its ✕ would then go nowhere.
+  if (path !== here) { S.nav.from = here; here = path; }
+
+  // The old screen packs up BEFORE the new one is built. Screen factories set the
+  // scene as they go (b7 shuts the eyes to sleep), and a teardown that restores
+  // eyeLid or bathing would otherwise land on top of it and undo the arrival.
+  // The old markup is still in #ui here, so DOM-touching teardowns are unaffected.
+  if (teardown) { try { teardown(); } catch { /* noop */ } teardown = null; }
+
   let out = null;
   for (const [re, fn] of ROUTES) {
     const m = path.match(re);
@@ -57,7 +71,6 @@ function render() {
   }
   if (!out) out = S.active() ? Screens.b1() : Screens.f2();
 
-  if (teardown) { try { teardown(); } catch { /* noop */ } teardown = null; }
   ui.innerHTML = out.html;
   const root = ui.firstElementChild || ui;
   stage.classList.toggle('dark', root.classList?.contains('dark'));

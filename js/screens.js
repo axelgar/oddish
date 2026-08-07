@@ -19,12 +19,21 @@ const topbar = (c) => `
     <button class="chip" data-go="#/field"><i style="width:9px;height:12px;border-radius:50%;background:#cbb193;display:block"></i>${S.session.creatures.length}</button>
   </div>`;
 
+// ✕ closes to the creature; ← steps back into whatever pushed this screen. The icon
+// is derived from the destination rather than passed in, so the two can never
+// disagree — a ✕ that quietly went somewhere else is the thing this fixes.
 const actionTop = (label, back = '#/') => `
   <div class="top">
-    <button class="chip icon" data-go="${back}">✕</button>
+    <button class="chip icon" data-go="${back}" aria-label="${back === '#/' ? 'Close' : 'Back'}"
+      >${back === '#/' ? '✕' : '←'}</button>
     <span class="mono" style="font-size:11.5px;letter-spacing:.2em">${label}</span>
     <button class="chip icon" data-go="#/menu" aria-label="Menu">≡</button>
   </div>`;
+
+// Screens reachable from several places have no one fixed home, so they step back to
+// wherever they were opened from. Falls back when there is no previous screen — a
+// reload, or a link straight in.
+const backTo = (fallback) => (S.nav.from ? `#${S.nav.from}` : fallback);
 
 const meterRow = (m) => `
   <div class="meters">${S.METERS.map((x) => `
@@ -341,6 +350,48 @@ function dragToCare(root) {
   };
 }
 
+/** Drag a .sheet down to put it away: it follows the finger and snaps back if you
+ *  don't pull far enough.
+ *
+ *  Dismissing a sheet reveals what the sheet was covering, so `to` is the creature —
+ *  NOT whatever screen pushed this one. That is the ✕'s job, and keeping the two
+ *  apart is what stops them being two controls for the same thing.
+ *
+ *  Track the move on the window and bind it to the pointer that started it, or a
+ *  second finger anywhere on screen can throw the drawer closed. */
+function sheetDrag(root, { sheet = '#sheet', handle = '.grab', to = '#/' } = {}) {
+  const el = $(sheet, root); if (!el) return () => {};
+  let y0 = null, dy = 0, pid = null;
+  const down = (e) => {
+    // from the handle, or from a list already at the top — otherwise scrolling the
+    // drawer's own content downward would throw it closed
+    if (el.scrollTop > 0 && !e.target.closest(handle)) return;
+    y0 = e.clientY; pid = e.pointerId; dy = 0;
+    el.classList.remove('snap');
+  };
+  const move = (e) => {
+    if (y0 == null || e.pointerId !== pid) return;
+    dy = Math.max(0, e.clientY - y0);
+    el.style.transform = `translateY(${dy}px)`;
+  };
+  const up = (e) => {
+    if (y0 == null || e.pointerId !== pid) return;
+    el.classList.add('snap');
+    if (dy > 90) { buzz(6); location.hash = to; } else el.style.transform = '';
+    y0 = null; dy = 0;
+  };
+  el.addEventListener('pointerdown', down);
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+  window.addEventListener('pointercancel', up);
+  return () => {
+    el.removeEventListener('pointerdown', down);
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+    window.removeEventListener('pointercancel', up);
+  };
+}
+
 export function b2() {
   const raw = S.active(); if (!raw) return f2();
   const c = S.view(raw);
@@ -366,29 +417,7 @@ export function b2() {
       </div>
     </div>`;
   function mount(root) {
-    const sheet = $('#sheet', root);
-    let y0 = null, dy = 0;
-    const down = (e) => { y0 = e.clientY; sheet.classList.remove('snap'); };
-    const move = (e) => {
-      if (y0 == null) return;
-      dy = Math.max(0, e.clientY - y0);
-      sheet.style.transform = `translateY(${dy}px)`;
-    };
-    const up = () => {
-      if (y0 == null) return;
-      sheet.classList.add('snap');
-      if (dy > 90) { buzz(6); location.hash = '#/'; } else sheet.style.transform = '';
-      y0 = null; dy = 0;
-    };
-    $('#grab', root).addEventListener('pointerdown', down);
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
-    window.addEventListener('pointercancel', up);
-    return () => {
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', up);
-      window.removeEventListener('pointercancel', up);
-    };
+    return sheetDrag(root);          // down puts the drawer away, back to the creature
   }
   return { html, mount };
 }
@@ -709,7 +738,7 @@ export function c1({ id }) {
     <div class="screen">
       ${actionTop('', '#/')}
       <div class="mono" style="position:absolute;left:0;right:0;top:300px;text-align:center;font-size:10.5px;opacity:.5;z-index:6">DRAG TO SPIN</div>
-      <div class="sheet" style="top:352px;bottom:0;overflow:auto">
+      <div class="sheet snap" id="sheet" style="top:352px;bottom:0;overflow:auto">
         <div class="grab" style="margin-bottom:16px"></div>
         <div style="display:flex;align-items:baseline;gap:10px">
           <span class="disp" style="font-size:30px">${nameOf(c)}</span>
@@ -741,10 +770,13 @@ export function c1({ id }) {
     stage.addEventListener('pointerdown', down);
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
+    // its card is a drawer too, and had a grab handle that did nothing
+    const undrag = sheetDrag(root, { to: S.active()?.id === raw.id ? '#/' : '#/field' });
     return () => {
       R.scene.spin = 0;
       stage.removeEventListener('pointerdown', down);
       window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up);
+      undrag();
     };
   }
   return { html, mount };
@@ -899,7 +931,7 @@ export function d2() {
   const html = `
     <div class="screen">
       <div style="position:absolute;inset:0;background:rgba(255,253,245,.94);z-index:6"></div>
-      ${actionTop('FIELDS', '#/care')}
+      ${actionTop('FIELDS', backTo('#/care'))}
       <div style="position:absolute;left:24px;right:24px;top:118px;bottom:24px;z-index:7;overflow:auto">
         <div class="disp" style="font-size:29px;margin-bottom:6px">Where they live</div>
         <div class="sub" style="margin-bottom:18px">Changing the field re-skins home, the collection and the photo booth. Same ground, different world.</div>

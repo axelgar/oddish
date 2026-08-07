@@ -217,6 +217,11 @@ const blank = () => ({
 
 export const session = load();
 
+// The path the router last left. Screens reachable from more than one place read
+// it so their ✕ goes back where the user came from. Deliberately not persisted —
+// a reload has no previous screen, and the fallback is the honest answer then.
+export const nav = { from: null };
+
 function load() {
   try {
     const raw = localStorage.getItem(KEY);
