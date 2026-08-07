@@ -903,7 +903,7 @@ export function d1() {
       ${actionTop('YOUR CREATURES', '#/')}
       ${others.map((o) => {
         const rare = o.creature.rarity !== 'Common';
-        return `<button class="chip" data-go="#/c/${o.creature.id}" style="position:absolute;left:${o.x}px;top:${o.y - 4}px;transform:translateX(-50%);z-index:6;padding:6px 11px;font-size:${11 + o.scale * 4}px;${rare ? 'background:rgba(232,194,100,.92)' : ''}">${nameOf(o.creature)}</button>`;
+        return `<button class="chip pick" data-id="${o.creature.id}" style="position:absolute;left:${o.x}px;top:${o.y - 4}px;transform:translateX(-50%);z-index:6;padding:6px 11px;font-size:${11 + o.scale * 4}px;${rare ? 'background:rgba(232,194,100,.92)' : ''}">${nameOf(o.creature)}</button>`;
       }).join('')}
       <div style="position:absolute;left:24px;right:24px;top:118px;z-index:7" class="row">
         <button class="card" data-go="#/fields"><div class="k">Field</div><div class="v">${S.fieldById(S.session.activeFieldId).name} ▾</div></button>
@@ -915,6 +915,11 @@ export function d1() {
       </div>
     </div>`;
   function mount(root) {
+    // pick one and it becomes the creature home shows — same move as c1's "Make active",
+    // one tap instead of a detour through the card.
+    $$('.pick', root).forEach((b) => b.onclick = () => {
+      S.session.activeCreatureId = b.dataset.id; S.save(); buzz(10); location.hash = '#/';
+    });
     $('#sort', root).onclick = () => {
       d1.sort = newest ? 'oldest' : 'newest';   // same function-object trick c2 uses for tabs
       buzz(6); window.dispatchEvent(new Event('hashchange'));
