@@ -257,7 +257,9 @@ function footMesh(side, tr) {
   return { verts, quads };
 }
 
-/** A frond: bezier spine, sine width profile, folded along the midrib.
+/** A frond: bezier spine, sine width profile, folded along the midrib, then given a
+ *  thickness — the surface is extruded both ways along its own normal and closed with
+ *  a rim, so the crown is a solid and not a set of cards seen edge-on.
  *  The bouquet fans IN THE SCREEN PLANE (a roll about Z) with only a little yaw for
  *  depth — fanning by yaw alone reads as two clumped leaves from the front. */
 function leafMesh(k, n, tr, seed, droop) {
@@ -284,31 +286,75 @@ function leafMesh(k, n, tr, seed, droop) {
   const cp = Math.cos(pitch), sp = Math.sin(pitch);
   const cr = Math.cos(roll), sr = Math.sin(roll);
   const cyw = Math.cos(yaw), syw = Math.sin(yaw);
-  const verts = [], quads = [];
-  for (let a = 0; a <= along; a++) {
-    const t = a / along;
-    // spine arc: rises, then eases outward toward the tip
+
+  // the mid-surface, in leaf-local space: t runs base → tip, v edge → edge
+  const surf = (t, v) => {
     const sy = t * L, sz = -0.26 * t * t - droop * 0.50 * t * t * t;
     const w = Math.sin(Math.PI * Math.pow(t, 0.85)) * halfW;
-    for (let b = 0; b <= across; b++) {
-      const v = (b / across) * 2 - 1;
-      // smooth edges with only a breath of waviness — no bites
-      const bite = 1 - 0.08 * Math.max(0, noise3(t * 7, v * 3, k * 11, seed ^ 31));
-      const wx = v * w * bite;
-      const fold = -Math.abs(v) * Math.abs(v) * w * 0.45;   // catches the key light
-      const X = wx, Y = sy, Z = sz + fold;
-      const y2 = Y * cp - Z * sp, z2 = Y * sp + Z * cp;         // pitch about X
-      const x3 = X * cr - y2 * sr, y3 = X * sr + y2 * cr;       // roll about Z — the fan
-      const x4 = x3 * cyw + z2 * syw, z4 = -x3 * syw + z2 * cyw; // yaw about Y — the depth
-      verts.push({ x: x4 + anchor.x, y: y3 + anchor.y, z: z4 + anchor.z });
-    }
+    // smooth edges with only a breath of waviness — no bites
+    const bite = 1 - 0.08 * Math.max(0, noise3(t * 7, v * 3, k * 11, seed ^ 31));
+    const fold = -Math.abs(v) * Math.abs(v) * w * 0.45;   // catches the key light
+    return { x: v * w * bite, y: sy, z: sz + fold };
+  };
+
+  // Surface normal by central difference. At the base the width collapses to a point,
+  // so the tangents vanish there — fall back to face-on rather than divide by zero.
+  const EPS = 1e-3;
+  const normal = (t, v) => {
+    const a1 = surf(Math.min(1, t + EPS), v), a0 = surf(Math.max(0, t - EPS), v);
+    const b1 = surf(t, Math.min(1, v + EPS)), b0 = surf(t, Math.max(-1, v - EPS));
+    const ux = a1.x - a0.x, uy = a1.y - a0.y, uz = a1.z - a0.z;
+    const vx = b1.x - b0.x, vy = b1.y - b0.y, vz = b1.z - b0.z;
+    let nx = vy * uz - vz * uy, ny = vz * ux - vx * uz, nz = vx * uy - vy * ux;
+    const l = Math.hypot(nx, ny, nz);
+    if (l < 1e-9) return { x: 0, y: 0, z: 1 };
+    nx /= l; ny /= l; nz /= l;
+    return nz < 0 ? { x: -nx, y: -ny, z: -nz } : { x: nx, y: ny, z: nz };
+  };
+
+  // Fleshiest along the midrib and at the base, thinning toward the edges and the
+  // tip — a slab of even thickness reads as cardboard. Never to zero: the rim is
+  // what you actually see when a frond turns edge-on.
+  const half = (t, v) => 0.075 * (0.35 + 0.65 * (1 - v * v)) * (1 - 0.45 * t);
+
+  const place = (X, Y, Z) => {
+    const y2 = Y * cp - Z * sp, z2 = Y * sp + Z * cp;          // pitch about X
+    const x3 = X * cr - y2 * sr, y3 = X * sr + y2 * cr;        // roll about Z — the fan
+    const x4 = x3 * cyw + z2 * syw, z4 = -x3 * syw + z2 * cyw; // yaw about Y — the depth
+    return { x: x4 + anchor.x, y: y3 + anchor.y, z: z4 + anchor.z };
+  };
+
+  const top = [], bot = [];
+  for (let a = 0; a <= along; a++) for (let b = 0; b <= across; b++) {
+    const t = a / along, v = (b / across) * 2 - 1;
+    const p = surf(t, v), nn = normal(t, v), h = half(t, v);
+    top.push(place(p.x + nn.x * h, p.y + nn.y * h, p.z + nn.z * h));
+    bot.push(place(p.x - nn.x * h, p.y - nn.y * h, p.z - nn.z * h));
   }
-  const idx = (a, b) => a * (across + 1) + b;
-  for (let a = 0; a < along; a++) for (let b = 0; b < across; b++)
-    quads.push([idx(a, b), idx(a + 1, b), idx(a + 1, b + 1), idx(a, b + 1)]);
+  const verts = [...top, ...bot];
+  const NV = top.length;
+  const iT = (a, b) => a * (across + 1) + b;
+  const iB = (a, b) => NV + iT(a, b);
+
+  // Wound so every quad normal points OUT of the solid — mesh() area-averages them
+  // per vertex, and a flipped face would cancel its neighbours along the silhouette.
+  const quads = [];
+  for (let a = 0; a < along; a++) for (let b = 0; b < across; b++) {
+    quads.push([iT(a, b), iT(a, b + 1), iT(a + 1, b + 1), iT(a + 1, b)]);   // face
+    quads.push([iB(a, b), iB(a + 1, b), iB(a + 1, b + 1), iB(a, b + 1)]);   // underside
+  }
+  for (let a = 0; a < along; a++) {                                         // the two long edges
+    quads.push([iT(a, 0), iT(a + 1, 0), iB(a + 1, 0), iB(a, 0)]);
+    quads.push([iT(a, across), iB(a, across), iB(a + 1, across), iT(a + 1, across)]);
+  }
+  for (let b = 0; b < across; b++)                                          // and the tip
+    quads.push([iT(along, b), iT(along, b + 1), iB(along, b + 1), iB(along, b)]);
+  // ponytail: the base is left open. Width is zero at t=0, so the hole is a hairline
+  // and it sits inside the head anyway. Cap it if a frond ever sprouts clear of the bulb.
+
   // the midrib, kept as vertices — the veins are drawn on the overlay layer and
-  // project these directly
-  const spine = range(along + 1).map((a) => verts[idx(a, Math.floor(across / 2))]);
+  // project these directly. Off the top shell, so they sit on the lit face.
+  const spine = range(along + 1).map((a) => top[iT(a, Math.floor(across / 2))]);
   return { verts, quads, spine };
 }
 
