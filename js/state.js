@@ -196,23 +196,54 @@ export const PICKABLE = FIELDS.filter((f) => !f.hidden);
 export const fieldById = (id) => FIELDS.find((f) => f.id === id) || FIELDS[0];
 
 export const GARNISHES = [
-  { id: 'sprig',   cat: 'hats',  label: 'Rosemary sprig', from: 'Oddish' },
-  { id: 'wheel',   cat: 'hats',  label: 'Citrus wheel',   from: 'Paloma' },
-  { id: 'shade',   cat: 'eyes',  label: 'Smoked shade',   from: 'Mezcal Negroni' },
-  { id: 'lash',    cat: 'eyes',  label: 'Cherry lash',    from: 'Manhattan' },
-  { id: 'pick',    cat: 'held',  label: 'Olive pick',     from: 'Martini' },
-  { id: 'straw',   cat: 'held',  label: 'Paper straw',    from: 'Collins' },
-  { id: 'fern',    cat: 'backs', label: 'Dried fern',     from: 'Last Word' },
-  { id: 'moth',    cat: 'backs', label: 'Paper moth',     from: 'Corpse Reviver' },
+  // Eight hats, and they are hats — the old sprig and wheel were bar garnishes
+  // balanced on its head, which is a different thing and read like one.
+  { id: 'bowler',  cat: 'hats',  label: 'Bowler',         from: 'Oddish' },
+  { id: 'tophat',  cat: 'hats',  label: 'Top hat',        from: 'Manhattan' },
+  { id: 'beanie',  cat: 'hats',  label: 'Bobble beanie',  from: 'Hot Toddy' },
+  { id: 'party',   cat: 'hats',  label: 'Party cone',     from: 'French 75' },
+  { id: 'cowboy',  cat: 'hats',  label: 'Ten-gallon',     from: 'Paloma' },
+  { id: 'beret',   cat: 'hats',  label: 'Beret',          from: 'Sidecar' },
+  { id: 'sunhat',  cat: 'hats',  label: 'Sun hat',        from: 'Daiquiri' },
+  { id: 'crown',   cat: 'hats',  label: 'Paper crown',    from: 'Corpse Reviver' },
+  { id: 'shade',   cat: 'eyes',  label: 'Smoked shades',  from: 'Mezcal Negroni' },
+  { id: 'lash',    cat: 'eyes',  label: 'Cherry lashes',  from: 'Manhattan' },
+  { id: 'round',   cat: 'eyes',  label: 'Wire rounds',    from: 'Vesper' },
+  { id: 'heart',   cat: 'eyes',  label: 'Heart shades',   from: 'Bramble' },
+  { id: 'star',    cat: 'eyes',  label: 'Star shades',    from: 'Espresso Martini' },
+  { id: 'monocle', cat: 'eyes',  label: 'Monocle',        from: 'Old Fashioned' },
+  { id: 'patch',   cat: 'eyes',  label: 'Eye patch',      from: 'Dark & Stormy' },
+  { id: 'visor',   cat: 'eyes',  label: 'Glitch visor',   from: 'Blue Hour' },
+  { id: 'pick',     cat: 'held',  label: 'Olive pick',     from: 'Martini' },
+  { id: 'straw',    cat: 'held',  label: 'Paper straw',    from: 'Collins' },
+  { id: 'umbrella', cat: 'held',  label: 'Parasol',        from: 'Mai Tai' },
+  { id: 'lantern',  cat: 'held',  label: 'Paper lantern',  from: 'Zombie' },
+  { id: 'balloon',  cat: 'held',  label: 'Balloon',        from: 'Bellini' },
+  { id: 'flag',     cat: 'held',  label: 'Pennant',        from: 'Americano' },
+  { id: 'tumbler',  cat: 'held',  label: 'Tumbler',        from: 'Old Fashioned' },
+  { id: 'stirrer',  cat: 'held',  label: 'Star stirrer',   from: 'Cosmopolitan' },
+  { id: 'fern',     cat: 'backs', label: 'Dried fern',     from: 'Last Word' },
+  { id: 'moth',     cat: 'backs', label: 'Paper moth',     from: 'Corpse Reviver' },
+  { id: 'wings',    cat: 'backs', label: 'Glass wings',    from: 'White Lady' },
+  { id: 'cape',     cat: 'backs', label: 'Velvet cape',    from: 'Boulevardier' },
+  { id: 'shell',    cat: 'backs', label: 'Snail shell',    from: 'Grasshopper' },
+  { id: 'pack',     cat: 'backs', label: 'Little pack',    from: 'Penicillin' },
+  { id: 'bloom',    cat: 'backs', label: 'Back bloom',     from: 'Hanky Panky' },
+  { id: 'antenna',  cat: 'backs', label: 'Signal antennae', from: 'Aviation' },
 ];
 
 /* ------------------------------------------------------------- session ---- */
 
 const KEY = 'glitch.creatures';
 
+// What the first egg comes with. Two hats and two eyes, deliberately: one of anything
+// is not a choice, and the dressing screen has to be worth opening before you have
+// bought a second drink. The rest still arrive one cocktail at a time.
+export const STARTER_GARNISHES = ['bowler', 'party', 'shade', 'heart', 'pick'];
+
 const blank = () => ({
   creatures: [], activeCreatureId: null, activeFieldId: 'meadow',
-  unlockedFields: ['meadow'], unlockedGarnishes: ['sprig', 'wheel', 'pick'],
+  unlockedFields: ['meadow'], unlockedGarnishes: [...STARTER_GARNISHES],
   claimedEggs: [], isGuest: true, accountId: null, email: null,
   hasSeenCoach: false, hasFed: false, lastNagAt: 0,
   sound: true, haptics: true, reduceMotion: false,
@@ -228,8 +259,27 @@ export const nav = { from: null };
 function load() {
   try {
     const raw = localStorage.getItem(KEY);
-    return raw ? { ...blank(), ...JSON.parse(raw) } : blank();
+    return raw ? migrate({ ...blank(), ...JSON.parse(raw) }) : blank();
   } catch { return blank(); }
+}
+
+// The two bar-garnish "hats" became eight real ones. Anyone who already owns or wears
+// sprig/wheel keeps something — a dangling id would just render nothing, forever.
+// Both tables live inside migrate(): it runs during `session = load()` above, so a
+// module-level const would still be in its temporal dead zone.
+function migrate(s) {
+  const OLD = { sprig: 'bowler', wheel: 'sunhat' };
+  const known = new Set(GARNISHES.map((g) => g.id));
+  // the starter set is granted, not just seeded — someone who already has a session
+  // would otherwise be stuck with whatever the old default handed out
+  s.unlockedGarnishes = [...new Set([
+    ...s.unlockedGarnishes.map((id) => OLD[id] || id), ...STARTER_GARNISHES,
+  ])].filter((id) => known.has(id));
+  for (const c of s.creatures) {
+    const h = c.garnishes?.hat;
+    if (h && !known.has(h)) c.garnishes.hat = OLD[h] || null;
+  }
+  return s;
 }
 
 export function save() {

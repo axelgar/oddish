@@ -559,6 +559,403 @@ export function ballSprite(px = 132) {
   });
 }
 
+/* ------------------------------------------------------------------ hats -- */
+
+/** Revolves a closed (r, y) outline about the Y axis. A hat is a solid of
+ *  revolution almost by definition, so eight hats are eight outlines and no
+ *  bespoke geometry. Close the outline (last point back at the first) and the
+ *  solid is watertight; r = 0 rings are degenerate poles and behave. */
+function lathe(profile, seg = 22) {
+  const verts = [], quads = [];
+  for (const { r, y } of profile) {
+    for (let i = 0; i <= seg; i++) {
+      const th = (i / seg) * Math.PI * 2;
+      verts.push({ x: Math.cos(th) * r, y, z: Math.sin(th) * r });
+    }
+  }
+  const idx = (p, i) => p * (seg + 1) + i;
+  for (let p = 0; p < profile.length - 1; p++) for (let i = 0; i < seg; i++)
+    quads.push([idx(p, i), idx(p, i + 1), idx(p + 1, i + 1), idx(p + 1, i)]);
+  return { verts, quads };
+}
+
+/** Outlines traced top-of-crown → down the outside → out along the brim → back
+ *  under it → in to the centre underside. Radius 1 ≈ the width of the bulb. */
+const HAT_SHAPE = {
+  bowler: [
+    { r: 0, y: 0.60 }, { r: 0.26, y: 0.57 }, { r: 0.45, y: 0.45 }, { r: 0.55, y: 0.25 },
+    { r: 0.58, y: 0.07 }, { r: 0.86, y: 0.05 }, { r: 0.92, y: 0.00 }, { r: 0.84, y: -0.03 },
+    { r: 0.56, y: -0.02 }, { r: 0, y: -0.02 },
+  ],
+  tophat: [
+    { r: 0, y: 1.02 }, { r: 0.50, y: 1.00 }, { r: 0.52, y: 0.94 }, { r: 0.50, y: 0.12 },
+    { r: 0.54, y: 0.06 }, { r: 0.92, y: 0.05 }, { r: 0.98, y: 0.00 }, { r: 0.90, y: -0.03 },
+    { r: 0.52, y: -0.02 }, { r: 0, y: -0.02 },
+  ],
+  beanie: [
+    { r: 0, y: 0.72 }, { r: 0.24, y: 0.70 }, { r: 0.46, y: 0.56 }, { r: 0.60, y: 0.32 },
+    { r: 0.66, y: 0.14 }, { r: 0.70, y: 0.02 }, { r: 0.68, y: -0.10 }, { r: 0.60, y: -0.12 },
+    { r: 0.58, y: 0.00 }, { r: 0, y: 0.02 },
+  ],
+  party: [
+    { r: 0, y: 1.15 }, { r: 0.10, y: 0.92 }, { r: 0.26, y: 0.58 }, { r: 0.44, y: 0.24 },
+    { r: 0.62, y: -0.04 }, { r: 0.58, y: -0.08 }, { r: 0, y: -0.06 },
+  ],
+  cowboy: [
+    { r: 0, y: 0.56 }, { r: 0.20, y: 0.55 }, { r: 0.40, y: 0.46 }, { r: 0.50, y: 0.26 },
+    { r: 0.54, y: 0.08 }, { r: 0.80, y: 0.02 }, { r: 1.02, y: 0.10 }, { r: 1.06, y: 0.05 },
+    { r: 0.82, y: -0.04 }, { r: 0.52, y: -0.02 }, { r: 0, y: -0.02 },
+  ],
+  beret: [
+    { r: 0, y: 0.38 }, { r: 0.34, y: 0.36 }, { r: 0.66, y: 0.27 }, { r: 0.90, y: 0.10 },
+    { r: 0.92, y: 0.01 }, { r: 0.76, y: -0.07 }, { r: 0.44, y: -0.09 }, { r: 0, y: -0.07 },
+  ],
+  sunhat: [
+    { r: 0, y: 0.44 }, { r: 0.24, y: 0.42 }, { r: 0.44, y: 0.32 }, { r: 0.52, y: 0.14 },
+    { r: 0.56, y: 0.04 }, { r: 0.95, y: -0.02 }, { r: 1.24, y: -0.14 }, { r: 1.26, y: -0.19 },
+    { r: 0.92, y: -0.09 }, { r: 0.54, y: -0.03 }, { r: 0, y: -0.02 },
+  ],
+  // a low band; the points are separate, or they vanish inside it
+  crown: [
+    { r: 0, y: 0.05 }, { r: 0.64, y: 0.05 }, { r: 0.68, y: 0.18 }, { r: 0.74, y: 0.16 },
+    { r: 0.72, y: -0.02 }, { r: 0.64, y: -0.04 }, { r: 0, y: -0.04 },
+  ],
+};
+
+/** The bits that aren't a revolution: a bobble, a hatband, the crown's points. */
+function hatExtras(id) {
+  if (id === 'beanie') return { mesh: shift(blobMesh(12, 9, () => ({ r: 1 })), 0, 0.80, 0, 0.20), skin: null };
+  if (id === 'party')  return { mesh: shift(blobMesh(12, 9, () => ({ r: 1 })), 0, 1.18, 0, 0.14), skin: null };
+  if (id === 'crown') {
+    // five points around the band — a paper crown is a band plus triangles
+    const parts = [];
+    for (let k = 0; k < 5; k++) {
+      const a = (k / 5) * Math.PI * 2;
+      parts.push(shift(lathe([
+        { r: 0, y: 0.54 }, { r: 0.15, y: 0.16 }, { r: 0.13, y: 0.10 }, { r: 0, y: 0.10 },
+      ], 5), Math.cos(a) * 0.68, 0, Math.sin(a) * 0.68, 1));
+    }
+    return { mesh: merge(parts), skin: HAT_SKIN.crown };   // gold points, not white ones
+  }
+  return null;
+}
+
+const HAT_SKIN = {
+  bowler:  { band: 1, deep: '#0D1014', body: '#2C3540', hi: '#7C8896' },
+  tophat:  { band: 1, deep: '#080A0D', body: '#23262E', hi: '#6E737F' },
+  beanie:  { deep: '#5A1226', body: '#B8354F', hi: '#F09BAA' },
+  party:   { deep: '#5C3C06', body: '#E0A32C', hi: '#FFE9A8' },
+  cowboy:  { band: 1, deep: '#4A3117', body: '#A87840', hi: '#EBC58C' },
+  beret:   { deep: '#0F2A34', body: '#2E6E7E', hi: '#8FD0DC' },
+  sunhat:  { band: 1, deep: '#6B5722', body: '#D9C179', hi: '#FFF6D2' },
+  crown:   { deep: '#5C4405', body: '#D3A521', hi: '#FFF0B4' },
+};
+const HAT_TRIM = { deep: '#1A1207', body: '#5A4630', hi: '#A2896B' };
+const HAT_EXTRA = { deep: '#6B6250', body: '#FFFDF5', hi: '#FFFFFF' };
+
+/** Where the band goes on the ones that have one — stated per hat, because scanning
+ *  the profile for "the radius jumps outward" finds the top of the dome, not the brim:
+ *  near the pole a lathe radius always grows fast. */
+const HAT_BAND = {
+  bowler: { r: 0.60, y: 0.10 },
+  tophat: { r: 0.54, y: 0.16 },
+  cowboy: { r: 0.56, y: 0.12 },
+  sunhat: { r: 0.58, y: 0.09 },
+};
+const hatBand = (id) => {
+  const { r, y } = HAT_BAND[id];
+  return lathe([{ r: 0, y: y + 0.11 }, { r, y: y + 0.11 }, { r, y }, { r: 0, y }]);
+};
+
+/** Builds one hat in its own space: y up, base at 0, radius 1 = bulb width. */
+function hatParts(id) {
+  const skin = HAT_SKIN[id] || HAT_SKIN.bowler;
+  const out = [{ name: 'shell', mesh: lathe(HAT_SHAPE[id] || HAT_SHAPE.bowler), skin, gloss: 0.3 }];
+  if (HAT_BAND[id]) out.push({ name: 'band', mesh: hatBand(id), skin: HAT_TRIM, gloss: 0.25 });
+  const ex = hatExtras(id);
+  if (ex) out.push({ name: 'extra', mesh: ex.mesh, skin: ex.skin || HAT_EXTRA, gloss: 0.35 });
+  return out;
+}
+
+/** Places the hat on a given body: scaled to the bulb, tipped forward so it perches
+ *  in front of the crown instead of disappearing into the bouquet. */
+// How far forward each is worn. A beret is jaunty; anything tall looks drunk unless
+// it sits nearly straight.
+const HAT_TILT = { beret: 0.36, tophat: 0.10, party: 0.07, crown: 0.12 };
+
+function hatMesh(id, tr) {
+  const [bx, by] = BODY_SHAPE[tr.bodyShape] || BODY_SHAPE.round;
+  const K = 0.92 * bx;                       // hat radius 1 ≈ the bulb's own radius
+  const TILT = (HAT_TILT[id] ?? 0.20) + tr.lean * 0.3;   // and it inherits the body's lean
+  const ct = Math.cos(TILT), st = Math.sin(TILT);
+
+  // Sit it ON the bulb rather than a fixed distance up it. The hats are solid, so any
+  // part left below the surface is a bulb poking through the brim — which is exactly
+  // what a fixed lift did to the wide ones. The body is an ellipsoid, so every profile
+  // radius has a height it has to clear; take the worst, after the tilt has dipped the
+  // front edge by r·sin(t). Points wider than the bulb have nothing under them.
+  let lift = 0;
+  for (const { r, y } of HAT_SHAPE[id] || HAT_SHAPE.bowler) {
+    const p = r * K;
+    if (p >= bx) continue;
+    lift = Math.max(lift, by * Math.sqrt(1 - (p / bx) ** 2) - y * K * ct + p * st);
+  }
+  lift -= 0.07 * by;      // then let it bite in a little, so it rests instead of hovers
+  const fwd = 0.10 * bx;
+  const put = (m) => ({
+    quads: m.quads,
+    verts: m.verts.map((v) => {
+      const x = v.x * K, y = v.y * K, z = v.z * K;
+      return { x, y: y * ct - z * st + lift, z: y * st + z * ct + fwd };
+    }),
+  });
+  const parts = hatParts(id);
+  return parts.map((p) => ({ ...p, mesh: put(p.mesh) }));
+}
+
+export function hatSprite(id, px = 132) {
+  return bakeProp(`hat|${id}`, px, 0.26, () => hatParts(id));
+}
+
+/* ------------------------------------------------------- held and worn --- */
+
+/** A stick, a tumbler, a pole — anything that is a circle swept up an axis. */
+const cyl = (r0, r1, y0, y1, seg = 12) =>
+  lathe([{ r: 0, y: y0 }, { r: r0, y: y0 }, { r: r1, y: y1 }, { r: 0, y: y1 }], seg);
+
+/** A flat polygon given thickness: wings, pennants, capes, leaflets. Fanned from
+ *  vertex 0, so outlines want to stay roughly convex. */
+function sheet(outline, thick) {
+  const n = outline.length, h = thick / 2, verts = [], quads = [];
+  for (const p of outline) verts.push({ x: p.x, y: p.y, z: h });
+  for (const p of outline) verts.push({ x: p.x, y: p.y, z: -h });
+  for (let i = 1; i < n - 1; i++) {
+    quads.push([0, i, i + 1, i + 1]);                 // repeated index = a triangle
+    quads.push([n, n + i + 1, n + i, n + i]);
+  }
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    quads.push([i, j, n + j, n + i]);                 // the rim
+  }
+  return { verts, quads };
+}
+
+/** Scale, spin about Z then X, and drop the result somewhere in body space. */
+function place(m, { s = 1, rz = 0, rx = 0, at = [0, 0, 0] }) {
+  const cz = Math.cos(rz), sz = Math.sin(rz), cx = Math.cos(rx), sx2 = Math.sin(rx);
+  return {
+    quads: m.quads,
+    verts: m.verts.map((v) => {
+      const x0 = v.x * s, y0 = v.y * s, z0 = v.z * s;
+      const x1 = x0 * cz - y0 * sz, y1 = x0 * sz + y0 * cz;
+      return { x: x1 + at[0], y: y1 * cx - z0 * sx2 + at[1], z: y1 * sx2 + z0 * cx + at[2] };
+    }),
+  };
+}
+
+const arc = (R0, r, a0, a1, n = 10) => {           // a bent rod: mug handles, straps
+  const parts = [];
+  for (let i = 0; i <= n; i++) {
+    const a = a0 + (a1 - a0) * (i / n);
+    parts.push(place(cyl(r, r, -r, r, 6), { at: [Math.cos(a) * R0, Math.sin(a) * R0, 0] }));
+  }
+  return merge(parts);
+};
+
+const WOOD  = { deep: '#3A2A16', body: '#9A7A4E', hi: '#DFC79A' };
+const PAPER = { deep: '#6B6250', body: '#F2EDE2', hi: '#FFFFFF' };
+const GREEN = { deep: '#1B3A20', body: '#4E8C3E', hi: '#9BCB72' };
+const GLASS = { deep: '#123642', body: '#7FB6C4', hi: '#EBFCFF' };
+
+/** Held in front of it, at about hand height. Unit space: y up, origin at the grip. */
+const HELD_KIT = {
+  pick: () => [
+    { name: 'stick', mesh: cyl(0.05, 0.04, -0.6, 0.8, 8), skin: PAPER, gloss: 0.3 },
+    { name: 'olive', mesh: place(blobMesh(12, 9, () => ({ r: 1, sy: 0.82 })), { s: 0.26, at: [0, 0.86, 0] }),
+      skin: { deep: '#2C3A12', body: '#6B7C3A', hi: '#BFD08A' }, gloss: 0.5 },
+    { name: 'pip', mesh: place(blobMesh(8, 6, () => ({ r: 1 })), { s: 0.10, at: [0, 0.86, 0.22] }),
+      skin: { deep: '#5A1608', body: '#B04430', hi: '#F0A08A' }, gloss: 0.6 },
+  ],
+  straw: () => [
+    { name: 'tube', mesh: cyl(0.10, 0.10, -0.7, 0.9, 10), skin: PAPER, gloss: 0.35 },
+    { name: 'bands', mesh: merge([-0.4, 0.0, 0.4, 0.8].map((y) => cyl(0.107, 0.107, y, y + 0.2, 10))),
+      skin: { deep: '#5A1A12', body: '#C05A4A', hi: '#F2A899' }, gloss: 0.35 },
+  ],
+  umbrella: () => [
+    { name: 'pole', mesh: cyl(0.035, 0.035, -0.7, 0.95, 8), skin: WOOD, gloss: 0.2 },
+    { name: 'canopy', mesh: lathe([
+      { r: 0, y: 0.95 }, { r: 0.62, y: 0.52 }, { r: 0.64, y: 0.48 }, { r: 0, y: 0.88 },
+    ], 14), skin: { deep: '#6B2340', body: '#E05A86', hi: '#FFC4D8' }, gloss: 0.3 },
+  ],
+  lantern: () => [
+    { name: 'paper', mesh: place(blobMesh(16, 12, () => ({ r: 1, sy: 0.78 })), { s: 0.52, at: [0, 0.2, 0] }),
+      skin: { deep: '#7A3A06', body: '#F0A02C', hi: '#FFEBB8' }, gloss: 0.15 },
+    { name: 'caps', mesh: merge([cyl(0.17, 0.17, 0.58, 0.66, 10), cyl(0.17, 0.17, -0.26, -0.18, 10),
+      cyl(0.022, 0.022, 0.66, 1.0, 6)]), skin: WOOD, gloss: 0.25 },
+  ],
+  balloon: () => [
+    { name: 'skin', mesh: place(lathe([
+      { r: 0, y: 1.05 }, { r: 0.42, y: 0.72 }, { r: 0.5, y: 0.3 }, { r: 0.34, y: 0.02 },
+      { r: 0.10, y: -0.10 }, { r: 0, y: -0.10 },
+    ], 16), { at: [0, 0.35, 0] }), skin: { deep: '#5C1020', body: '#D9556E', hi: '#FFC0C8' }, gloss: 0.8 },
+    { name: 'string', mesh: cyl(0.016, 0.016, -0.75, 0.26, 5), skin: PAPER, gloss: 0.1 },
+  ],
+  flag: () => [
+    { name: 'pole', mesh: cyl(0.035, 0.035, -0.7, 1.0, 8), skin: WOOD, gloss: 0.2 },
+    { name: 'cloth', mesh: place(sheet([
+      { x: 0, y: 0.28 }, { x: 0.66, y: 0.14 }, { x: 0.66, y: 0.06 }, { x: 0, y: -0.28 },
+    ], 0.05), { at: [0.03, 0.72, 0] }), skin: { deep: '#5C4405', body: '#E8C264', hi: '#FFF3C6' }, gloss: 0.3 },
+  ],
+  tumbler: () => [
+    { name: 'glass', mesh: lathe([
+      { r: 0, y: -0.32 }, { r: 0.40, y: -0.32 }, { r: 0.46, y: 0.52 }, { r: 0.40, y: 0.52 },
+      { r: 0.35, y: -0.24 }, { r: 0, y: -0.24 },
+    ], 14), skin: GLASS, gloss: 0.95 },
+    { name: 'pour', mesh: lathe([
+      { r: 0, y: -0.20 }, { r: 0.36, y: -0.20 }, { r: 0.40, y: 0.24 }, { r: 0, y: 0.24 },
+    ], 14), skin: { deep: '#4A1A06', body: '#C0682A', hi: '#F5C489' }, gloss: 0.7 },
+  ],
+  stirrer: () => [
+    { name: 'rod', mesh: cyl(0.04, 0.04, -0.65, 0.78, 8), skin: GLASS, gloss: 0.9 },
+    { name: 'star', mesh: place(lathe([
+      { r: 0, y: 0.30 }, { r: 0.30, y: 0.06 }, { r: 0.26, y: -0.02 }, { r: 0, y: -0.02 },
+    ], 5), { at: [0, 0.80, 0] }), skin: { deep: '#5C4405', body: '#D3A521', hi: '#FFF0B4' }, gloss: 0.7 },
+  ],
+};
+
+/** Worn on the back, behind the shoulder. Unit space: y up, z away from the viewer. */
+const BACK_KIT = {
+  fern: () => {
+    const parts = [cyl(0.035, 0.02, -0.1, 1.1, 6)];
+    for (let i = 0; i < 7; i++) {
+      const y = 0.15 + i * 0.13, s = 0.30 - i * 0.028, side = i % 2 ? 1 : -1;
+      parts.push(place(blobMesh(8, 6, () => ({ r: 1, sy: 0.34 })),
+        { s, rz: side * 0.5, at: [side * s * 1.1, y, 0] }));
+    }
+    return [{ name: 'frond', mesh: merge(parts), skin: { deep: '#3A2A10', body: '#9E7C4A', hi: '#DCC08A' }, gloss: 0.2 }];
+  },
+  moth: () => {
+    const wing = (s) => merge([
+      place(sheet([{ x: 0, y: 0 }, { x: 0.9, y: 0.34 }, { x: 1.0, y: -0.10 }, { x: 0.2, y: -0.30 }], 0.05),
+        { s: 1, rz: s > 0 ? 0.2 : -0.2 + Math.PI, at: [0, 0.16, 0] }),
+      place(sheet([{ x: 0, y: 0 }, { x: 0.62, y: -0.06 }, { x: 0.5, y: -0.42 }, { x: 0.1, y: -0.36 }], 0.05),
+        { s: 1, rz: s > 0 ? -0.1 : 0.1 + Math.PI, at: [0, -0.10, 0] }),
+    ]);
+    return [
+      { name: 'wings', mesh: merge([wing(1), wing(-1)]), skin: PAPER, gloss: 0.1 },
+      { name: 'body', mesh: place(blobMesh(10, 8, () => ({ r: 1, sy: 2.0 })), { s: 0.13 }),
+        skin: { deep: '#1E1A14', body: '#4A4036', hi: '#8E8272' }, gloss: 0.3 },
+    ];
+  },
+  wings: () => {
+    const right = sheet([
+      { x: 0, y: 0.30 }, { x: 0.95, y: 0.72 }, { x: 1.15, y: 0.10 }, { x: 0.72, y: -0.55 }, { x: 0, y: -0.30 },
+    ], 0.07);
+    const left = { quads: right.quads, verts: right.verts.map((v) => ({ ...v, x: -v.x })) };
+    return [{ name: 'pair', mesh: merge([right, left]),
+      skin: { deep: '#5A6E7A', body: '#DCE8EE', hi: '#FFFFFF' }, gloss: 0.45 }];
+  },
+  cape: () => [
+    { name: 'cloth', mesh: lathe([
+      { r: 0.10, y: 0.55 }, { r: 0.86, y: -0.85 }, { r: 0.90, y: -0.88 }, { r: 0.16, y: 0.52 },
+    ], 16), skin: { deep: '#3A0A18', body: '#8E1F3A', hi: '#DE7A94' }, gloss: 0.25 },
+    { name: 'collar', mesh: place(cyl(0.24, 0.24, -0.05, 0.06, 12), { at: [0, 0.55, 0] }),
+      skin: { deep: '#5C4405', body: '#D3A521', hi: '#FFF0B4' }, gloss: 0.7 },
+  ],
+  shell: () => {
+    const parts = [];
+    for (let i = 0; i <= 22; i++) {           // a coil, tightening as it goes
+      const a = i * 0.62, r = 0.62 * Math.pow(0.90, i);
+      parts.push(place(blobMesh(9, 7, () => ({ r: 1 })),
+        { s: r * 0.62, at: [Math.cos(a) * (0.72 - r * 0.5), Math.sin(a) * (0.72 - r * 0.5), i * 0.012] }));
+    }
+    return [{ name: 'coil', mesh: merge(parts), skin: { deep: '#4A2C10', body: '#B98A4E', hi: '#F0D5A4' }, gloss: 0.5 }];
+  },
+  pack: () => [
+    { name: 'bag', mesh: place(blobMesh(12, 10, () => ({ r: 1, sy: 1.05 })), { s: 0.62 }),
+      skin: { deep: '#2A1C0E', body: '#7A5A32', hi: '#C6A470' }, gloss: 0.3 },
+    { name: 'straps', mesh: merge([-1, 1].map((s) => place(cyl(0.05, 0.05, -0.5, 0.5, 6), { at: [s * 0.34, 0.16, 0.5] }))),
+      skin: { deep: '#1A1207', body: '#4A3520', hi: '#8A7050' }, gloss: 0.2 },
+  ],
+  antenna: () => [
+    { name: 'stalks', mesh: merge([-1, 1].map((s) => place(cyl(0.035, 0.025, 0, 1.0, 6),
+      { rz: s * 0.26, at: [s * 0.16, -0.1, 0] }))),
+      skin: { deep: '#14202A', body: '#3E5464', hi: '#94AEC0' }, gloss: 0.4 },
+    { name: 'bulbs', mesh: merge([-1, 1].map((s) => place(blobMesh(10, 8, () => ({ r: 1 })),
+      { s: 0.19, at: [s * 0.44, 0.92, 0] }))),
+      skin: { deep: '#0E3A48', body: '#3ECBE4', hi: '#DFFAFF' }, gloss: 0.9 },
+  ],
+  bloom: () => [
+    { name: 'petals', mesh: calyx(6, 0.62, 0.24, 0.30, 0),
+      skin: { deep: '#6B2340', body: '#E06A96', hi: '#FFCDDD' }, gloss: 0.3 },
+    { name: 'eye', mesh: place(blobMesh(10, 8, () => ({ r: 1, sy: 0.7 })), { s: 0.22 }),
+      skin: { deep: '#5C4405', body: '#E8C264', hi: '#FFF3C6' }, gloss: 0.5 },
+    { name: 'stem', mesh: cyl(0.045, 0.03, -0.85, 0, 6), skin: GREEN, gloss: 0.2 },
+  ],
+};
+
+/** Places a held prop out to its right, at hand height and clear of the silhouette. */
+function heldMesh(id, tr) {
+  const [bx, by] = BODY_SHAPE[tr.bodyShape] || BODY_SHAPE.round;
+  const parts = HELD_KIT[id]?.(); if (!parts) return null;
+  const at = [1.12 * bx, -0.16 * by, 0.46 * bx];
+  return parts.map((p) => ({ ...p, mesh: place(p.mesh, { s: 0.72 * bx, rz: -0.26 + tr.lean * 0.4, at }) }));
+}
+
+/** Where each worn prop sits. Behind the body is behind the DEPTH BUFFER now, so a
+ *  centred prop at the old anchor was simply invisible — every one of these has to
+ *  break the bulb's silhouette to exist at all. Wide things stay centred and spread
+ *  past the sides; tall things ride high and show over the shoulder; the rest sit off
+ *  to one side. x is negative: over its left shoulder, as we look at it. */
+const BACK_FIT = {
+  fern:   { s: 1.30, at: [-0.74, 0.40, -0.34], rx: -0.26 },
+  moth:   { s: 1.10, at: [-0.66, 0.58, -0.28], rx: -0.18 },
+  wings:  { s: 1.40, at: [0, 0.34, -0.40], rx: -0.24 },
+  cape:   { s: 1.42, at: [0, 0.54, -0.32], rx: -0.14 },
+  shell:  { s: 1.20, at: [-0.72, 0.30, -0.34], rx: -0.22 },
+  pack:   { s: 1.15, at: [-0.16, 0.80, -0.46], rx: -0.20 },
+  bloom:  { s: 1.30, at: [-0.74, 0.48, -0.32], rx: -0.26 },
+  // up and over the shoulder: the bulbs clear the bulb, and cyan reads against leaves
+  antenna: { s: 1.20, at: [-0.20, 0.62, -0.44], rx: -0.26 },
+};
+
+function backMesh(id, tr) {
+  const [bx, by] = BODY_SHAPE[tr.bodyShape] || BODY_SHAPE.round;
+  const parts = BACK_KIT[id]?.(); const fit = BACK_FIT[id];
+  if (!parts || !fit) return null;
+  const at = [fit.at[0] * bx, fit.at[1] * by, fit.at[2] * bx];
+  return parts.map((p) => ({ ...p, mesh: place(p.mesh, { s: fit.s * bx, rx: fit.rx, at }) }));
+}
+
+export function heldSprite(id, px = 132) {
+  return bakeProp(`held|${id}`, px, 0.14, () => HELD_KIT[id]().map(
+    (p) => ({ ...p, mesh: place(p.mesh, { s: 0.86 }) })));
+}
+
+export function backSprite(id, px = 132) {
+  return bakeProp(`back|${id}`, px, 0.14, () => BACK_KIT[id]().map(
+    (p) => ({ ...p, mesh: place(p.mesh, { s: 0.86 }) })));
+}
+
+const eyewearCache = new Map();
+
+/** Eyewear straight on, for the dress slots. No GL: it is 2D paint on the face, so the
+ *  preview is the same paint against a flat pair of decals — identity frames, det > 0. */
+export function eyewearSprite(id, px = 96) {
+  if (eyewearCache.has(`${id}|${px}`)) return eyewearCache.get(`${id}|${px}`);
+  const cv = document.createElement('canvas');
+  cv.width = px * DPR; cv.height = px * DPR;
+  const c2 = cv.getContext('2d');
+  c2.scale(DPR, DPR);
+  const u = px * 0.135, gap = u * 1.9;
+  const flat = (x) => ({ X: px / 2 + x, Y: px / 2, z: 1, det: 1, m: [1, 0, 0, 1] });
+  const prev = ctx;
+  ctx = c2;
+  try { paintEyewear(id, [flat(-gap), flat(gap)], u); } finally { ctx = prev; }
+  eyewearCache.set(`${id}|${px}`, cv);
+  return cv;
+}
+
 function eggMesh(seed) {
   const verts = [], quads = [], seg = 16, ring = 12;
   for (let j = 0; j <= ring; j++) {
@@ -640,7 +1037,11 @@ function merge(list) {
 
 const meshCache = new Map();
 function meshesFor(c, droop, lod = 1) {
-  const key = `${c.genomeSeed}|${Math.round(droop * 6)}|${lod}`;
+  // hats, held props and worn props are all geometry now, so they belong in the key —
+  // without them, putting one on hands back the cached undressed meshes
+  const gn = c.garnishes || {};
+  const hat = gn.hat || '-';
+  const key = `${c.genomeSeed}|${Math.round(droop * 6)}|${lod}|${hat}|${gn.held || '-'}|${gn.back || '-'}`;
   if (meshCache.has(key)) return meshCache.get(key);
   // the genome drives the noise too — two creatures with equal trait rolls
   // must still lump, lean and get bitten differently
@@ -653,6 +1054,9 @@ function meshesFor(c, droop, lod = 1) {
     feet: merge([legMesh(-1, tr), footMesh(-1, tr), legMesh(1, tr), footMesh(1, tr)]),
     leaves,                      // kept apart for the veins, which project the midribs
     crown: merge(leaves),
+    hat: HAT_SHAPE[hat] ? hatMesh(hat, tr) : null,
+    held: gn.held ? heldMesh(gn.held, tr) : null,
+    back: gn.back ? backMesh(gn.back, tr) : null,
   };
   if (meshCache.size > 40) meshCache.clear();
   meshCache.set(key, m);
@@ -787,7 +1191,6 @@ function creatureUnder(st) {
   const S0 = pose.scale;
   const air = Math.min(0.4, hop / (26 * S0));
   pool(cam.ox, pose.y - 2 * S0, 84 * S0 * (1 - air * 0.5), 15 * S0, 0.42 * (1 - air));
-  drawGarnishBack(st.c, cam);                 // behind the body — the body covers it
 }
 
 /** The creature itself: body, feet, crown. Three draws, depth-buffered. */
@@ -799,6 +1202,13 @@ function creatureGeom(st) {
     { ramp: skin.body, gloss: skin.gloss * 0.6, sick, key: KEY, fill: FILL });
   GL.draw(GL.mesh(`${m.key}|crown`, () => m.crown), cam,
     { ramp: skin.leaf, gloss: 0.22, sick, key: KEY, fill: FILL });
+  // Worn and carried things, depth-buffered like everything else: the fronds pass
+  // through the hat instead of the hat sitting flat on the bouquet, and the body
+  // occludes whatever is behind it without anyone sorting a thing.
+  for (const [slot, parts] of [['hat', m.hat], ['held', m.held], ['back', m.back]])
+    for (const p of parts || [])
+      GL.draw(GL.mesh(`${m.key}|${slot}|${p.name}`, () => p.mesh), cam,
+        { ramp: ramp(p.skin.deep, p.skin.body, p.skin.hi), gloss: p.gloss, sick: 0, key: KEY, fill: FILL });
 }
 
 /** Over the body, on the overlay layer: veins, face, mud, garnishes, rarity bloom. */
@@ -843,6 +1253,147 @@ const EYE_SCALE = {
   button: 0.85, round: 1.0, wide: 1.14, sparkly: 1.06,
   slit: 0.95, pinhole: 0.82, 'too many': 1.0,
 };
+
+/* --------------------------------------------------------------- eyewear -- */
+
+/** A lens outline in the eye's own surface frame, so it foreshortens with the face
+ *  instead of floating in front of it. `u` is one eye-radius in px. */
+const LENS = {
+  round: (u) => { ctx.beginPath(); ctx.arc(0, 0, u * 1.30, 0, 7); },
+  square: (u) => { ctx.beginPath(); ctx.roundRect(-u * 1.45, -u * 1.15, u * 2.9, u * 2.3, u * 0.5); },
+  heart: (u) => {
+    const s = u * 1.5;
+    ctx.beginPath();
+    ctx.moveTo(0, s * 0.95);
+    ctx.bezierCurveTo(-s * 1.25, -s * 0.15, -s * 0.62, -s * 1.05, 0, -s * 0.38);
+    ctx.bezierCurveTo(s * 0.62, -s * 1.05, s * 1.25, -s * 0.15, 0, s * 0.95);
+  },
+  star: (u) => {
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const a = -Math.PI / 2 + (i / 10) * Math.PI * 2;
+      const r = u * (i % 2 ? 0.66 : 1.62);
+      ctx[i ? 'lineTo' : 'moveTo'](Math.cos(a) * r, Math.sin(a) * r);
+    }
+    ctx.closePath();
+  },
+};
+
+/** Paints one eyewear item. `ds` are the two eye decals, `u` one eye-radius in px.
+ *  Lenses are drawn in each eye's surface frame; bridges and arms join the two
+ *  projected centres in screen space, which is where a straight wire actually is. */
+function paintEyewear(id, ds, u) {
+  const [d0, d1] = ds;
+  const live = ds.filter((d) => d.det > 0);
+  const lens = (shape, fill, stroke, lw) => {
+    for (const d of live) {
+      onSurface(d);
+      shape(u);
+      if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+      if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw; ctx.stroke(); }
+      ctx.restore();
+    }
+  };
+  // a wire between the two eyes, and one running off past each ear
+  const wire = (col, lw, gap) => {
+    ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.lineCap = 'round';
+    const dx = d1.X - d0.X, dy = d1.Y - d0.Y, L = Math.hypot(dx, dy) || 1;
+    const ux = dx / L, uy = dy / L;
+    ctx.beginPath();
+    ctx.moveTo(d0.X + ux * gap, d0.Y + uy * gap);
+    ctx.lineTo(d1.X - ux * gap, d1.Y - uy * gap);
+    ctx.stroke();
+    for (const [d, s] of [[d0, -1], [d1, 1]]) {
+      if (d.det <= 0) continue;
+      ctx.beginPath();
+      ctx.moveTo(d.X + s * ux * gap, d.Y + s * uy * gap);
+      ctx.lineTo(d.X + s * ux * gap * 2.1, d.Y + s * uy * gap * 2.1 - u * 0.5);
+      ctx.stroke();
+    }
+  };
+
+  ctx.lineJoin = 'round';
+  if (id === 'shade') {
+    lens(LENS.square, 'rgba(20,16,24,.9)', 'rgba(8,6,10,.95)', u * 0.26);
+    wire('rgba(12,10,14,.95)', u * 0.22, u * 1.42);
+    for (const d of live) {                      // a slash of window light on each lens
+      onSurface(d);
+      ctx.strokeStyle = 'rgba(255,253,245,.20)'; ctx.lineWidth = u * 0.45; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(-u * 1.0, u * 0.5); ctx.lineTo(u * 0.6, -u * 0.7); ctx.stroke();
+      ctx.restore();
+    }
+  } else if (id === 'round') {
+    lens(LENS.round, 'rgba(214,236,244,.26)', '#C9A24B', u * 0.20);
+    wire('#C9A24B', u * 0.16, u * 1.34);
+  } else if (id === 'heart') {
+    lens(LENS.heart, 'rgba(224,74,120,.78)', '#F2C0D2', u * 0.20);
+    wire('#F2C0D2', u * 0.18, u * 1.42);
+  } else if (id === 'star') {
+    lens(LENS.star, 'rgba(240,198,90,.82)', '#8A5A2C', u * 0.18);
+    wire('#8A5A2C', u * 0.18, u * 1.5);
+  } else if (id === 'monocle') {
+    // one lens only, on its left as we look at it, with the cord falling away
+    const d = d1.det > 0 ? d1 : d0;
+    onSurface(d);
+    ctx.beginPath(); ctx.arc(0, 0, u * 1.35, 0, 7);
+    ctx.fillStyle = 'rgba(220,238,246,.28)'; ctx.fill();
+    ctx.strokeStyle = '#C9A24B'; ctx.lineWidth = u * 0.26; ctx.stroke();
+    ctx.restore();
+    ctx.strokeStyle = 'rgba(60,48,36,.85)'; ctx.lineWidth = u * 0.13; ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(d.X + u * 1.3, d.Y + u * 0.5);
+    ctx.quadraticCurveTo(d.X + u * 2.6, d.Y + u * 2.6, d.X + u * 1.8, d.Y + u * 4.2);
+    ctx.stroke();
+  } else if (id === 'patch') {
+    const d = d0.det > 0 ? d0 : d1;
+    ctx.strokeStyle = 'rgba(24,20,26,.92)'; ctx.lineWidth = u * 0.20; ctx.lineCap = 'round';
+    ctx.beginPath();                            // strap, right across the head
+    ctx.moveTo(d.X - u * 3.4, d.Y - u * 1.9);
+    ctx.quadraticCurveTo(d1.X, d1.Y - u * 2.4, d1.X + u * 3.0, d1.Y - u * 1.2);
+    ctx.stroke();
+    onSurface(d);
+    ctx.fillStyle = '#1B1720';
+    ctx.beginPath(); ctx.roundRect(-u * 1.5, -u * 1.35, u * 3.0, u * 2.7, u * 0.8); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,253,245,.14)'; ctx.lineWidth = u * 0.14;
+    ctx.beginPath(); ctx.moveTo(-u * 1.0, -u * 0.3); ctx.lineTo(u * 1.0, -u * 0.55); ctx.stroke();
+    ctx.restore();
+  } else if (id === 'visor') {
+    // one bar across both eyes — the house wink, lit the way the tear used to be
+    const dx = d1.X - d0.X, dy = d1.Y - d0.Y, L = Math.hypot(dx, dy) || 1;
+    const ux = dx / L, uy = dy / L;
+    ctx.save();
+    ctx.translate((d0.X + d1.X) / 2, (d0.Y + d1.Y) / 2);
+    ctx.rotate(Math.atan2(uy, ux));
+    const w = L / 2 + u * 2.0, h = u * 1.35;
+    ctx.fillStyle = 'rgba(16,14,22,.94)';
+    ctx.beginPath(); ctx.roundRect(-w, -h, w * 2, h * 2, h * 0.7); ctx.fill();
+    const gl = ctx.createLinearGradient(-w, 0, w, 0);
+    gl.addColorStop(0, 'rgba(255,79,163,.85)');
+    gl.addColorStop(0.5, 'rgba(255,253,245,.55)');
+    gl.addColorStop(1, 'rgba(88,215,240,.85)');
+    ctx.strokeStyle = gl; ctx.lineWidth = u * 0.34; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-w + h * 0.6, h * 0.2); ctx.lineTo(w - h * 0.6, h * 0.2); ctx.stroke();
+    ctx.restore();
+  } else if (id === 'lash') {
+    ctx.strokeStyle = 'rgba(20,12,16,.9)'; ctx.lineCap = 'round';
+    ds.forEach((d, i) => {
+      if (d.det <= 0) return;
+      const s = i ? 1 : -1;
+      onSurface(d);
+      ctx.lineWidth = u * 0.16;
+      for (let k = 0; k < 3; k++) {
+        const x = (k - 1) * u * 0.52;
+        ctx.beginPath();
+        ctx.moveTo(x, -u * 1.15);
+        ctx.quadraticCurveTo(x + s * u * 0.3, -u * 1.9, x + s * u * 0.72, -u * 2.1);
+        ctx.stroke();
+      }
+      ctx.fillStyle = '#B23A4A';                 // the cherry
+      ctx.beginPath(); ctx.arc(s * u * 1.15, -u * 1.5, u * 0.32, 0, 7); ctx.fill();
+      ctx.restore();
+    });
+  }
+}
 
 function drawFace(c, cam, met, sick) {
   const tr = c.traits;
@@ -979,167 +1530,30 @@ function drawMud(c, cam, met) {
 }
 
 /* ---------------------------------------------------------- garnishes ---- */
-// C2 equips these. Each is a small hand-drawn prop pinned to a surface anchor,
-// so it tracks yaw, pitch and breathing exactly like the face does.
-
-const BACK_ANCHOR = [-0.42, 0.72, -0.62];   // upper-left shoulder, behind
-
-function drawGarnishBack(c, cam) {
-  if (!c.garnishes?.back) return;
-  const a = anchor(...BACK_ANCHOR, c.traits);
-  if (faceDir(a, cam.yaw, cam.pitch).z > 0.05) return;   // spun to face us → front pass owns it
-  paintBack(c, cam, a);
-}
-
-function paintBack(c, cam, a) {
-  const { yaw, pitch, sx, sy, R, ox, oy } = cam;
-  const S = R / 92;
-  const p = project1(a, yaw, pitch, sx, sy, R, ox, oy);
-  ctx.save();
-  if (c.garnishes.back === 'fern') {
-    // dried fern arcing up from behind the shoulder
-    const tip = { X: p.X - 16 * S, Y: p.Y - 74 * S }, ctl = { X: p.X - 30 * S, Y: p.Y - 42 * S };
-    ctx.strokeStyle = '#8A6B3E'; ctx.lineWidth = 2 * S; ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.moveTo(p.X, p.Y); ctx.quadraticCurveTo(ctl.X, ctl.Y, tip.X, tip.Y); ctx.stroke();
-    ctx.fillStyle = 'rgba(158,124,74,.92)';
-    for (let i = 0; i < 7; i++) {
-      const t = 0.3 + i * 0.1, u = 1 - t;
-      const qx = u * u * p.X + 2 * u * t * ctl.X + t * t * tip.X;
-      const qy = u * u * p.Y + 2 * u * t * ctl.Y + t * t * tip.Y;
-      const side = i % 2 ? 1 : -1;
-      ctx.beginPath();
-      ctx.ellipse(qx + side * 6 * S, qy - 2 * S, 8 * S, 3 * S, side * 0.55, 0, 7);
-      ctx.fill();
-    }
-  } else if (c.garnishes.back === 'moth') {
-    // paper moth perched on the rim of the silhouette, slow flap
-    const flap = reduced() ? 0.2 : 0.2 + 0.14 * Math.sin(T * 4.6);
-    ctx.translate(p.X, p.Y - 6 * S); ctx.rotate(-0.22);
-    ctx.fillStyle = 'rgba(233,225,201,.95)';
-    for (const s of [-1, 1]) {
-      ctx.save(); ctx.scale(s, 1); ctx.rotate(-flap);
-      ctx.beginPath(); ctx.ellipse(12 * S, -4 * S, 12.5 * S, 7 * S, 0.35, 0, 7); ctx.fill();
-      ctx.beginPath(); ctx.ellipse(9 * S, 5 * S, 7.5 * S, 4.6 * S, -0.2, 0, 7); ctx.fill();
-      ctx.restore();
-    }
-    ctx.fillStyle = '#4A4036';
-    ctx.beginPath(); ctx.ellipse(0, 0, 2.5 * S, 5.6 * S, 0, 0, 7); ctx.fill();
-  }
-  ctx.restore();
-}
+// C2 equips these. Hats, held props and worn props are geometry, drawn with the
+// creature in creatureGeom; only eyewear is paint, because the face is paint too.
 
 function drawGarnish(c, cam) {
   const g = c.garnishes;
   if (!g) return;
   const tr = c.traits;
-  const { yaw, pitch, sx, sy, R, ox, oy } = cam;
-  const S = R / 92;
+  const { yaw, pitch } = cam;
+  const S = cam.R / 92;
 
-  if (g.back) {
-    const a = anchor(...BACK_ANCHOR, tr);
-    if (faceDir(a, yaw, pitch).z > 0.05) paintBack(c, cam, a);
-  }
-
-  if (g.hat) {
-    const a = anchor(0.04, 1.02, 0.10, tr);
-    const p = project1(a, yaw, pitch, sx, sy, R, ox, oy);
-    const d = faceDir(a, yaw, pitch);
-    ctx.save();
-    ctx.translate(p.X, p.Y); ctx.rotate(d.x * 0.35 + tr.lean * 0.5);
-    if (g.hat === 'sprig') {
-      ctx.strokeStyle = '#3E5A34'; ctx.lineCap = 'round';
-      for (const tilt of [-0.5, -0.05, 0.42]) {
-        ctx.save(); ctx.rotate(tilt);
-        ctx.lineWidth = 2 * S;
-        ctx.beginPath(); ctx.moveTo(0, 3 * S); ctx.lineTo(0, -19 * S); ctx.stroke();
-        ctx.lineWidth = 1.1 * S;
-        for (let i = 1; i <= 5; i++) {
-          const y = -i * 3.3 * S;
-          ctx.beginPath();
-          ctx.moveTo(0, y); ctx.lineTo(-3.5 * S, y - 2.5 * S);
-          ctx.moveTo(0, y); ctx.lineTo(3.5 * S, y - 2.5 * S);
-          ctx.stroke();
-        }
-        ctx.restore();
-      }
-    } else if (g.hat === 'wheel') {
-      // citrus wheel wedged into the crown like on a glass rim
-      ctx.rotate(-0.3);
-      ctx.fillStyle = '#E8A24A';
-      ctx.beginPath(); ctx.arc(0, -9 * S, 13 * S, 0, 7); ctx.fill();
-      ctx.strokeStyle = '#C9762E'; ctx.lineWidth = 3 * S; ctx.stroke();
-      ctx.strokeStyle = 'rgba(255,244,214,.85)'; ctx.lineWidth = 1.2 * S;
-      for (let i = 0; i < 6; i++) {
-        const w = (i / 6) * Math.PI * 2;
-        ctx.beginPath(); ctx.moveTo(0, -9 * S);
-        ctx.lineTo(Math.cos(w) * 10.5 * S, -9 * S + Math.sin(w) * 10.5 * S); ctx.stroke();
-      }
-    }
-    ctx.restore();
-  }
-
+  // hat, held and back are all geometry now — nothing for the overlay to paint.
   if (g.eyes) {
-    // the same two front-eye anchors drawFace uses
-    const eyeA = [anchor(-0.34, 0.10, 0.90, tr), anchor(0.34, 0.10 + tr.lean * 0.2, 0.90, tr)];
+    // the same two front-eye anchors drawFace uses, and its eye size — a frame that
+    // ignores eyeType sits wrong on every genome that isn't the average one
+    const ds = [decal(-0.34, 0.10, 0.90, tr, cam), decal(0.34, 0.10 + tr.lean * 0.1, 0.90, tr, cam)];
     const dm = faceDir(anchor(0, 0.10, 0.95, tr), yaw, pitch);
-    if (dm.z > 0.16) {
-      const [p0, p1] = eyeA.map((e) => project1(e, yaw, pitch, sx, sy, R, ox, oy));
+    if (dm.z > 0.16 && ds.some((d) => d.det > 0)) {
       ctx.save();
       ctx.globalAlpha = Math.min(1, (dm.z - 0.16) / 0.25);
-      if (g.eyes === 'shade') {
-        ctx.strokeStyle = 'rgba(22,18,26,.88)'; ctx.lineCap = 'round';
-        ctx.lineWidth = 26 * S;
-        ctx.beginPath(); ctx.moveTo(p0.X - 6 * S, p0.Y); ctx.lineTo(p1.X + 6 * S, p1.Y); ctx.stroke();
-        ctx.lineWidth = 3 * S;                       // arms toward the ears
-        ctx.beginPath(); ctx.moveTo(p0.X - 6 * S, p0.Y); ctx.lineTo(p0.X - 24 * S, p0.Y - 7 * S); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(p1.X + 6 * S, p1.Y); ctx.lineTo(p1.X + 24 * S, p1.Y - 7 * S); ctx.stroke();
-        ctx.strokeStyle = 'rgba(255,253,245,.16)'; ctx.lineWidth = 5 * S;
-        ctx.beginPath(); ctx.moveTo(p0.X - 2 * S, p0.Y - 7 * S); ctx.lineTo(p1.X + 2 * S, p1.Y - 7 * S); ctx.stroke();
-      } else if (g.eyes === 'lash') {
-        ctx.strokeStyle = 'rgba(20,12,16,.9)'; ctx.lineWidth = 1.6 * S; ctx.lineCap = 'round';
-        [p0, p1].forEach((p, i) => {
-          const s = i ? 1 : -1;
-          for (let k = 0; k < 3; k++) {
-            const x = p.X + (k - 1) * 5 * S;
-            ctx.beginPath();
-            ctx.moveTo(x, p.Y - 13 * S);
-            ctx.quadraticCurveTo(x + s * 3 * S, p.Y - 21 * S, x + s * 7 * S, p.Y - 23 * S);
-            ctx.stroke();
-          }
-          ctx.fillStyle = '#B23A4A';                 // the cherry
-          ctx.beginPath(); ctx.arc(p.X + s * 12 * S, p.Y - 16 * S, 3.2 * S, 0, 7); ctx.fill();
-        });
-      }
+      paintEyewear(g.eyes, ds, 11.6 * S * (EYE_SCALE[tr.eyeType] || 1));
       ctx.restore();
     }
   }
 
-  if (g.held) {
-    const a = anchor(0.92, -0.60, 0.30, tr);
-    const d = faceDir(a, yaw, pitch);
-    if (d.z > -0.15) {
-      const p = project1(a, yaw, pitch, sx, sy, R, ox, oy);
-      ctx.save();
-      ctx.translate(p.X, p.Y);
-      if (g.held === 'pick') {
-        ctx.strokeStyle = '#D8CBB2'; ctx.lineWidth = 2 * S; ctx.lineCap = 'round';
-        ctx.beginPath(); ctx.moveTo(0, 10 * S); ctx.lineTo(7 * S, -24 * S); ctx.stroke();
-        ctx.fillStyle = '#6B7C3A';
-        ctx.beginPath(); ctx.ellipse(8 * S, -28 * S, 6 * S, 5 * S, 0.3, 0, 7); ctx.fill();
-        ctx.fillStyle = '#B04430';
-        ctx.beginPath(); ctx.arc(10 * S, -29 * S, 1.8 * S, 0, 7); ctx.fill();
-      } else if (g.held === 'straw') {
-        ctx.rotate(0.42);
-        for (let i = 0; i < 6; i++) {
-          ctx.fillStyle = i % 2 ? '#C05A4A' : '#F2EDE2';
-          ctx.fillRect(-2.8 * S, (-30 + i * 7) * S, 5.6 * S, 7 * S);
-        }
-        ctx.strokeStyle = 'rgba(0,0,0,.25)'; ctx.lineWidth = 1;
-        ctx.strokeRect(-2.8 * S, -30 * S, 5.6 * S, 42 * S);
-      }
-      ctx.restore();
-    }
-  }
 }
 
 const mudCache = new Map();

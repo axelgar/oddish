@@ -830,10 +830,13 @@ export function c2({ id }) {
   const cat = c2.cat && cats.includes(c2.cat) ? c2.cat : 'hats';
   const slotKey = { hats: 'hat', eyes: 'eyes', held: 'held', backs: 'back' }[cat];
   const items = S.GARNISHES.filter((g) => g.cat === cat);
+  // reachable from the creature card, the care sheet and #/dress, so the ✕ and the
+  // swipe both go back where they came from
+  const back = backTo(`#/c/${c.id}`);
   const html = `
     <div class="screen">
-      ${actionTop('DRESSING', `#/c/${c.id}`)}
-      <div class="sheet" style="top:352px;bottom:0;overflow:auto">
+      ${actionTop('DRESSING', back)}
+      <div class="sheet snap" id="sheet" style="top:352px;bottom:0;overflow:auto">
         <div class="grab" style="margin-bottom:16px"></div>
         <div class="wrap" style="margin-bottom:18px">
           ${cats.map((k) => `<button class="chip flat tab${k === cat ? ' on' : ''}" data-cat="${k}" style="font-size:12.5px;text-transform:capitalize">${k}</button>`).join('')}
@@ -842,7 +845,8 @@ export function c2({ id }) {
           ${items.map((g) => {
             const locked = !S.session.unlockedGarnishes.includes(g.id);
             const on = raw.garnishes[slotKey] === g.id;
-            return `<button class="slot${locked ? ' lock' : ''}${on ? ' on' : ''}" data-g="${locked ? '' : g.id}" title="${esc(g.label)}">${locked ? '?' : '◆'}</button>`;
+            const art = locked ? '' : ` data-art="${cat}:${g.id}"`;
+            return `<button class="slot${locked ? ' lock' : ''}${on ? ' on' : ''}" data-g="${locked ? '' : g.id}"${art} title="${esc(g.label)}">${locked ? '?' : '◆'}</button>`;
           }).join('')}
           ${[...Array(Math.max(0, 8 - items.length))].map(() => '<div class="slot lock">?</div>').join('')}
         </div>
@@ -851,12 +855,35 @@ export function c2({ id }) {
       </div>
     </div>`;
   function mount(root) {
+    // show the thing itself in its slot rather than a diamond — you cannot pick what
+    // you cannot see. Plain task, not rAF: the GL bakes borrow the live canvas.
+    const ART = { hats: R.hatSprite, eyes: R.eyewearSprite, held: R.heldSprite, backs: R.backSprite };
+    let paint = 0;
+    const tiles = $$('.slot[data-art]', root);
+    const fill = () => {
+      const left = tiles.filter((b) => {
+        const [k, id] = b.dataset.art.split(':');
+        const cv = ART[k](id, 72);
+        if (!cv) return true;
+        cv.style.cssText = 'width:52px;height:52px;display:block;margin:auto';
+        b.textContent = ''; b.append(cv);
+        return false;
+      });
+      if (left.length) paint = setTimeout(fill, 120);
+    };
+    fill();
+
     $$('.tab', root).forEach((b) => b.onclick = () => { c2.cat = b.dataset.cat; window.dispatchEvent(new Event('hashchange')); });
     $$('.slot[data-g]', root).forEach((b) => b.onclick = () => {
       if (!b.dataset.g) return;
       raw.garnishes[slotKey] = raw.garnishes[slotKey] === b.dataset.g ? null : b.dataset.g;
       S.save(); buzz(8); window.dispatchEvent(new Event('hashchange'));
     });
+    // Dismissing lands on the creature it is dressing, which is what the sheet was
+    // covering — home if that is the active one, its own card otherwise, since home
+    // would otherwise show a different creature entirely.
+    const undrag = sheetDrag(root, { to: S.active()?.id === raw.id ? '#/' : `#/c/${c.id}` });
+    return () => { clearTimeout(paint); undrag(); };
   }
   return { html, mount };
 }
