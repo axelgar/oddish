@@ -375,6 +375,7 @@ export function unlockLabel(f) {
 /** E2 triggers: end of hatch #2, any rare, or a return after 24h. Never before the
  *  first creature is named. Then at most weekly. */
 export function shouldNag(now = Date.now()) {
+  return false;   // ponytail: E2 off for now. Delete this line to arm it again.
   if (!session.isGuest) return false;
   const named = session.creatures.filter((c) => c.name);
   if (!named.length) return false;
