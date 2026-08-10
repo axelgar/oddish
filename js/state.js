@@ -236,10 +236,16 @@ export const GARNISHES = [
 
 const KEY = 'glitch.creatures';
 
-// What the first egg comes with. Two hats and two eyes, deliberately: one of anything
-// is not a choice, and the dressing screen has to be worth opening before you have
-// bought a second drink. The rest still arrive one cocktail at a time.
-export const STARTER_GARNISHES = ['bowler', 'party', 'shade', 'heart', 'pick'];
+// What the first egg comes with: half the wardrobe, four from each of the four slots.
+// A dressing screen with one wearable per slot is a form, not a dress-up — you need
+// enough to make a creature that looks like a choice. The other half still arrives
+// one cocktail at a time.
+export const STARTER_GARNISHES = [
+  'bowler', 'party', 'beanie', 'cowboy',
+  'shade', 'heart', 'round', 'lash',
+  'pick', 'straw', 'umbrella', 'balloon',
+  'fern', 'moth', 'wings', 'shell',
+];
 
 const blank = () => ({
   creatures: [], activeCreatureId: null, activeFieldId: 'meadow',
