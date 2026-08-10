@@ -344,6 +344,30 @@ function dragToCare(root) {
  *
  *  Track the move on the window and bind it to the pointer that started it, or a
  *  second finger anywhere on screen can throw the drawer closed. */
+/** Drag the stage sideways to orbit the creature. The card and the dressing screen
+ *  both hang a sheet at `top`, so only drags started ABOVE it turn anything — below
+ *  is the drawer's own business. Callers own the reset: spin is scene state, and
+ *  where it should be left depends on where you are going. */
+function spinDrag(top = 352) {
+  const stage = $('#stage');
+  let last = null;
+  // stage coords, not client px — the desktop clamp scales the stage
+  const down = (e) => {
+    const r = stage.getBoundingClientRect();
+    if ((e.clientY - r.top) / (r.height / R.H) < top) last = e.clientX;
+  };
+  const move = (e) => { if (last == null) return; R.scene.spin += (e.clientX - last) * 0.012; last = e.clientX; };
+  const up = () => { last = null; R.scene.spinVel = 0; };
+  stage.addEventListener('pointerdown', down);
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+  return () => {
+    stage.removeEventListener('pointerdown', down);
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+  };
+}
+
 function sheetDrag(root, { sheet = '#sheet', handle = '.grab', to = '#/' } = {}) {
   const el = $(sheet, root); if (!el) return () => {};
   let y0 = null, dy = 0, pid = null;
@@ -781,27 +805,10 @@ export function c1({ id }) {
     </div>`;
   function mount(root) {
     $('#mkactive', root).onclick = () => { S.session.activeCreatureId = c.id; S.save(); buzz(10); location.hash = '#/'; };
-    // drag to orbit, spring back on release
-    const stage = $('#stage');
-    let last = null;
-    // stage coords, not client px — the desktop clamp scales the stage
-    const down = (e) => {
-      const r = stage.getBoundingClientRect();
-      if ((e.clientY - r.top) / (r.height / R.H) < 352) last = e.clientX;
-    };
-    const move = (e) => { if (last == null) return; R.scene.spin += (e.clientX - last) * 0.012; last = e.clientX; };
-    const up = () => { last = null; R.scene.spinVel = 0; };
-    stage.addEventListener('pointerdown', down);
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
+    const unspin = spinDrag();
     // its card is a drawer too, and had a grab handle that did nothing
     const undrag = sheetDrag(root, { to: S.active()?.id === raw.id ? '#/' : '#/field' });
-    return () => {
-      R.scene.spin = 0;
-      stage.removeEventListener('pointerdown', down);
-      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up);
-      undrag();
-    };
+    return () => { R.scene.spin = 0; unspin(); undrag(); };
   }
   return { html, mount };
 }
@@ -809,8 +816,14 @@ export function c1({ id }) {
 export function c2({ id }) {
   const raw = S.creatureById(id); if (!raw) return f2();
   const c = S.view(raw);
+  // 0.56 and y:330, same as the card: this screen turns a full 360° too, and at 0.6
+  // the taller genomes lose their leaf tips off the top of the stage at some yaw.
   R.set({ mode: 'creature', creature: c, field: S.session.activeFieldId, groundTop: 404, props: false,
-    hidden: false, wander: false, pose: { x: 195, y: 340, scale: 0.6 } });
+    hidden: false, wander: false, pose: { x: 195, y: 330, scale: 0.56 } });
+  // Picking a garnish re-renders the whole screen through hashchange, so the angle has
+  // to outlive the mount — otherwise every tap snaps it back to facing you, which is
+  // the one view that cannot show you a cape.
+  R.scene.spin = c2.spin || 0;
   const cats = ['hats', 'eyes', 'held', 'backs'];
   const cat = c2.cat && cats.includes(c2.cat) ? c2.cat : 'hats';
   const slotKey = { hats: 'hat', eyes: 'eyes', held: 'held', backs: 'back' }[cat];
@@ -821,6 +834,7 @@ export function c2({ id }) {
   const html = `
     <div class="screen">
       ${actionTop('DRESSING', back)}
+      <div class="mono" style="position:absolute;left:0;right:0;top:300px;text-align:center;font-size:10.5px;opacity:.5;z-index:6">DRAG TO SPIN</div>
       <div class="sheet snap" id="sheet" style="top:352px;bottom:0;overflow:auto">
         <div class="grab" style="margin-bottom:16px"></div>
         <div class="wrap" style="margin-bottom:18px">
@@ -867,8 +881,9 @@ export function c2({ id }) {
     // Dismissing lands on the creature it is dressing, which is what the sheet was
     // covering — home if that is the active one, its own card otherwise, since home
     // would otherwise show a different creature entirely.
+    const unspin = spinDrag();
     const undrag = sheetDrag(root, { to: S.active()?.id === raw.id ? '#/' : `#/c/${c.id}` });
-    return () => { clearTimeout(paint); undrag(); };
+    return () => { clearTimeout(paint); c2.spin = R.scene.spin; R.scene.spin = 0; unspin(); undrag(); };
   }
   return { html, mount };
 }
