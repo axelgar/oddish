@@ -7,7 +7,22 @@ import qrcode from './vendor/qrcode.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
-export const buzz = (ms = 8) => S.session.haptics && navigator.vibrate?.(ms);
+// ponytail: iOS has no Vibration API, and flipping a <input type="checkbox" switch>
+// through its label is the only thing WebKit 17.4+ answers with a real haptic. One
+// fixed tap, no duration — swap for a native wrapper if the egg ever needs a ramp.
+let hapLabel = null;
+const iosTap = () => {
+  if (!hapLabel) {
+    hapLabel = Object.assign(document.createElement('label'), { htmlFor: 'ios-haptic' });
+    // clipped, not hidden — a display:none switch never renders, so it never buzzes
+    hapLabel.style.cssText = 'position:fixed;width:1px;height:1px;clip-path:inset(50%);pointer-events:none';
+    hapLabel.innerHTML = '<input type="checkbox" switch id="ios-haptic" tabindex="-1" aria-hidden="true">';
+    document.body.append(hapLabel);
+  }
+  hapLabel.click();
+};
+
+export const buzz = (ms = 8) => S.session.haptics && (navigator.vibrate?.(ms) ?? iosTap());
 
 const hhmm = (t) => new Date(t).toTimeString().slice(0, 5);
 const dmon = (t) => new Date(t).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }).toUpperCase();
