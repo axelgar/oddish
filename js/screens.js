@@ -708,6 +708,7 @@ export function b5() {
         last = { x: ev.clientX, y: ev.clientY, t: now };
       };
       const cancel = () => {
+        seed.classList.remove('held');
         window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up);
         window.removeEventListener('pointercancel', cancel);
       };
