@@ -59,7 +59,7 @@ export function a1({ eggId }) {
     </div>` };
 }
 
-/** A2 idle + A3 warming are one screen — the hold IS the transition. */
+/** A2 idle + A3 warming are one screen — the taps ARE the transition. */
 export function a2({ eggId }) {
   R.set({ mode: 'egg', field: 'meadow', groundTop: 500, props: false, hidden: false,
     pose: { x: 195, y: 686, scale: 1 }, crackStage: 2, hold: 0, wander: false });
@@ -68,65 +68,50 @@ export function a2({ eggId }) {
     <div class="screen">
       <div class="wordmark"><span class="mark">GLITCH</span></div>
       <div class="hd" style="top:160px">
-        <div class="disp" id="a-hd" style="font-size:40px">It's cold.<br>Warm it up.</div>
-        <div class="mono" id="a-note" style="font-size:11.5px;margin-top:18px;opacity:.6">PRESS AND HOLD</div>
+        <div class="disp" id="a-hd" style="font-size:40px">It's cold.<br>Wake it up.</div>
+        <div class="mono" id="a-note" style="font-size:11.5px;margin-top:18px;opacity:.6">TAP THE EGG</div>
       </div>
-      <button class="holdbtn" id="hold" aria-label="Press and hold to hatch">
-        <span class="halo"></span>
-        <svg class="ring" viewBox="0 0 82 82" width="82" height="82">
-          <circle cx="41" cy="41" r="38.5" fill="none" stroke="rgba(255,253,245,.35)" stroke-width="3.5"/>
-          <circle id="ringfill" cx="41" cy="41" r="38.5" fill="none" stroke="#FFFDF5" stroke-width="3.5"
-                  stroke-linecap="round" stroke-dasharray="242" stroke-dashoffset="242"/>
-        </svg>
-        <span class="core"></span>
-      </button>
+      <button class="eggtap" id="tap" aria-label="Tap the egg to hatch it"></button>
     </div>`;
 
   function mount() {
-    // rarity is decided on the FIRST tap, not at completion — the tell is duration.
+    // rarity is decided on the FIRST tap, not at completion — the tell is how many it takes.
     const mat = S.rollMaterial(String(eggId));
-    const DUR = mat.id === 'gold' ? 3600 : mat.rare ? 3000 : 2400;
-    const ring = $('#ringfill'), hd = $('#a-hd'), note = $('#a-note');
+    const TAPS = mat.id === 'gold' ? 14 : mat.rare ? 12 : 9;
+    const hd = $('#a-hd'), note = $('#a-note');
     // stage starts at 2 to match crackStage above, or the first tick buzzes untouched
-    let holding = false, start = 0, stage = 2, raf = 0, done = false;
+    let taps = 0, stage = 2, raf = 0, done = false;
 
-    const stop = () => { holding = false; };
+    // the glow only eases toward the tap count — the taps themselves are discrete
     const tick = () => {
       raf = requestAnimationFrame(tick);
+      R.scene.hold += (taps / TAPS - R.scene.hold) * 0.16;
+    };
+    raf = requestAnimationFrame(tick);
+
+    const tap = () => {
       if (done) return;
-      const p = holding
-        ? Math.min(1, (performance.now() - start) / DUR)
-        : Math.max(0, R.scene.hold - 0.04);                 // release rewinds, no penalty
-      R.scene.hold = p;
-      ring.setAttribute('stroke-dashoffset', String(242 * (1 - p)));
+      const p = ++taps / TAPS;
       const st = Math.min(4, Math.floor(p * 4) + 2);
-      if (st !== stage) { stage = st; R.scene.crackStage = st; buzz(6); }
-      if (holding && Math.random() < 0.14) R.emit('spark', 1, { x: 195, y: 640, spread: 90 });
+      if (st !== stage) { stage = st; R.scene.crackStage = st; buzz(10); } else buzz(5);
+      R.squash(0.24, 0.5);
+      R.emit('spark', 3, { x: 195, y: 640, spread: 90 });
+      hd.innerHTML = 'Something’s<br>moving.';
+      note.textContent = p >= 1 ? 'IT’S OPENING' : `${TAPS - taps} MORE`;
+      window.dispatchEvent(new Event('glitch:audio-unlock'));
       if (p >= 1) {
-        done = true; cancelAnimationFrame(raf); buzz(30);
+        done = true; buzz(30);
         R.emit('shard', 22, { x: 195, y: 620, spread: 120 });
         const c = S.hatch(eggId, { table: 4 });
         setTimeout(() => { location.hash = `#/reveal/${c.id}`; }, mat.rare ? 400 : 260);
       }
     };
-    raf = requestAnimationFrame(tick);
-
-    const begin = (e) => {
-      e.preventDefault();
-      if (done) return;
-      holding = true;
-      start = performance.now() - R.scene.hold * DUR;
-      hd.innerHTML = 'Something’s<br>moving.';
-      note.textContent = 'KEEP HOLDING';
-      buzz(4);
-      window.dispatchEvent(new Event('glitch:audio-unlock'));
-    };
-    const stage_ = $('#stage');
-    const ac = new AbortController();                  // one teardown for all four
-    stage_.addEventListener('pointerdown', begin, { signal: ac.signal });
-    stage_.addEventListener('pointerup', stop, { signal: ac.signal });
-    stage_.addEventListener('pointercancel', stop, { signal: ac.signal });
-    stage_.addEventListener('pointerleave', stop, { signal: ac.signal });
+    const btn = $('#tap'), ac = new AbortController();
+    // pointerdown, not click — a tap mechanic has to answer on the way down
+    btn.addEventListener('pointerdown', (e) => { e.preventDefault(); tap(); }, { signal: ac.signal });
+    btn.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tap(); }
+    }, { signal: ac.signal });
     return () => { cancelAnimationFrame(raf); ac.abort(); };
   }
   return { html, mount };

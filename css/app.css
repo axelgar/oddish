@@ -160,12 +160,10 @@ body{
 .orb.drag{position:fixed;z-index:20;pointer-events:none;margin:-30px 0 0 -30px;left:0;top:0;
   background:none;box-shadow:none;filter:drop-shadow(0 6px 8px rgba(0,0,0,.42))}
 
-.holdbtn{position:absolute;left:50%;bottom:60px;transform:translateX(-50%);width:82px;height:82px;z-index:7;
-  border-radius:50%;border:0;background:transparent;padding:0;display:grid;place-items:center}
-.holdbtn .ring{position:absolute;inset:0;transform:rotate(-90deg)}
-.holdbtn .core{width:54px;height:54px;border-radius:50%;background:rgba(255,253,245,.95)}
-.holdbtn .halo{position:absolute;inset:0;border-radius:50%;border:2.5px solid rgba(255,253,245,.9);
-  background:rgba(255,253,245,.25);backdrop-filter:blur(12px)}
+/* invisible hit area over the egg (centre 195,586 · ~80x100 radius), sized generously
+   so a thumb lands on it. Focusable, so Enter/Space taps too. */
+.eggtap{position:absolute;left:50%;top:450px;transform:translateX(-50%);width:220px;height:250px;
+  z-index:7;border-radius:50%;border:0;background:transparent;padding:0}
 
 .plate{display:inline-block;border:1.5px solid var(--gold);border-radius:7px;padding:8px 18px;
   font:600 12px 'JetBrains Mono',monospace;letter-spacing:.24em;color:var(--gold);
