@@ -384,19 +384,21 @@ function spinDrag(top = 352) {
   };
 }
 
-function sheetDrag(root, { sheet = '#sheet', handle = '.grab', to = '#/' } = {}) {
+function sheetDrag(root, { sheet = '#sheet', to = '#/' } = {}) {
   const el = $(sheet, root); if (!el) return () => {};
   let y0 = null, dy = 0, pid = null;
   const down = (e) => {
-    // from the handle, or from a list already at the top — otherwise scrolling the
-    // drawer's own content downward would throw it closed
-    if (el.scrollTop > 0 && !e.target.closest(handle)) return;
     y0 = e.clientY; pid = e.pointerId; dy = 0;
     el.classList.remove('snap');
   };
   const move = (e) => {
     if (y0 == null || e.pointerId !== pid) return;
-    dy = Math.max(0, e.clientY - y0);
+    const d = e.clientY - y0;
+    // The drawer's own content scrolls first, under the same finger. Only once it is
+    // back at the top does a downward drag start pulling the drawer itself — one
+    // gesture, no second swipe, and nothing to grab for once the handle scrolls away.
+    if (!dy && (d < 0 || el.scrollTop > 0)) { el.scrollTop -= d; y0 = e.clientY; return; }
+    dy = Math.max(0, d);
     el.style.transform = `translateY(${dy}px)`;
   };
   const up = (e) => {
