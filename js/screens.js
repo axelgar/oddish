@@ -461,8 +461,8 @@ export function b3() {
         <div class="disp" style="font-size:30px">Drag a berry to ${nameOf(c)}</div>
         <div class="mono" style="font-size:11px;opacity:.55;margin-top:10px">IT WON'T EAT WHAT IT DOESN'T LIKE</div>
       </div>
-      ${S.session.hasFed ? '' : `<svg style="position:absolute;left:150px;top:430px;width:110px;height:170px;z-index:6" viewBox="0 0 110 170" aria-hidden="true">
-        <path d="M96 162 C 96 100, 70 54, 12 12" fill="none" stroke="rgba(255,253,245,.75)" stroke-width="2.5" stroke-dasharray="1 7" stroke-linecap="round"/>
+      ${S.session.hasFed ? '' : `<svg style="position:absolute;left:160px;top:628px;width:70px;height:94px;z-index:6" viewBox="0 0 70 94" aria-hidden="true">
+        <path d="M35 88 C 24 68, 28 40, 35 4" fill="none" stroke="rgba(255,253,245,.75)" stroke-width="2.5" stroke-dasharray="1 7" stroke-linecap="round"/>
       </svg>`}
       <div class="actionbar">
         <div class="progress"><i id="fed" style="width:${c.meters.hunger}%"></i></div>
