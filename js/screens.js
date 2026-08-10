@@ -543,71 +543,113 @@ export function b3() {
 }
 
 /* -- B4 Bathe ------------------------------------------------------------ */
+// Soap / Splash / Rinse used to be three buttons running the same line — three ways
+// to do nothing, so picking one could never be a decision. They are beats of one
+// sequence now: soap makes the mud liftable, the swipe lifts it, rinse ends the bath.
+// Exactly one is live at a time, so "which and why" answers itself.
 
 export function b4() {
   const raw = S.active(); if (!raw) return f2();
   const c = S.view(raw);
   R.set({ mode: 'creature', creature: c, field: S.session.activeFieldId, groundTop: 330, props: false,
-    hidden: false, wander: false, bathing: true, pose: { x: 195, y: 720, scale: 1.24 } });
+    hidden: false, wander: false, bathing: true, suds: 0, pose: { x: 195, y: 720, scale: 1.24 } });
   const spots = R.mudSpots(raw);
   spots.forEach((s) => s.erased = false);
   const html = `
     <div class="screen">
       ${actionTop('BATHING')}
       <div class="hd" style="top:132px">
-        <div class="disp" style="font-size:30px">Scrub the mud off</div>
-        <div class="mono" style="font-size:11px;opacity:.55;margin-top:10px">SWIPE ANYWHERE ON ${nameOf(c).toUpperCase()}</div>
+        <div class="disp" id="step" style="font-size:30px">Soap it up first</div>
+        <div class="mono" id="hint" style="font-size:11px;opacity:.55;margin-top:10px">DRY MUD JUST SMEARS</div>
       </div>
       <div class="actionbar">
         <div class="progress"><i id="wash" style="width:0%"></i></div>
         <div class="row">
-          ${['Soap', 'Splash', 'Rinse'].map((s) => `<button class="chip sub3" style="flex:1;justify-content:center;background:rgba(255,253,245,.92);padding:15px 0;font-size:14px">${s}</button>`).join('')}
+          <button class="chip step on" id="soap">Soap</button>
+          <button class="chip step" id="rinse" disabled>Rinse</button>
         </div>
       </div>
     </div>`;
 
   function mount(root) {
-    const bar = $('#wash', root);
-    let down = false, done = false, doneT = 0;
+    const bar = $('#wash', root), soap = $('#soap', root), rinse = $('#rinse', root);
     const stage = $('#stage');
+    const nm = (c.name || 'it').toUpperCase();
+    // textContent, so a name with an & is not double-escaped on its way back out
+    const say = (t, h) => { $('#step', root).textContent = t; $('#hint', root).textContent = h; };
+    const turn = (b, live) => { b.disabled = !live; b.classList.toggle('on', live); };
+
+    let phase = 'dry';            // dry → wet → scrubbed → done
+    let down = false, nagT = 0, doneT = 0;
+
+    soap.onclick = () => {
+      if (phase !== 'dry') return;
+      phase = 'wet';
+      R.set({ suds: 1 });
+      R.emit('bubble', 22, { spread: 150, up: 0.5 });
+      R.wiggle(0.5); buzz(8);
+      turn(soap, false);
+      say('Scrub the mud off', `SWIPE ANYWHERE ON ${nm}`);
+    };
+
+    rinse.onclick = () => {
+      if (phase !== 'scrubbed') return;
+      phase = 'done';
+      turn(rinse, false);
+      S.care(raw, 'bathe'); buzz(20);
+      R.set({ suds: 0 });
+      R.scene.eyeLid = 1;
+      R.wiggle(0.9); R.squash(0.18, 0.7);                   // the shake-off
+      R.emit('droplet', 40, { spread: 200, up: 0.6 });
+      R.emit('heart', 5);
+      say('All clean', 'RINSED');
+      doneT = setTimeout(() => { location.hash = '#/'; }, 1200);
+    };
+
     const erase = (ev) => {
-      if (!down || done) return;
+      if (!down) return;
       const r = stage.getBoundingClientRect();
       const sx = (ev.clientX - r.left) / (r.width / R.W), sy = (ev.clientY - r.top) / (r.height / R.H);
       if (!R.hitCreature(sx, sy)) return;
-      const live = spots.filter((s) => !s.erased);
-      if (live.length) {
-        // scrub where the finger is: erase the nearest spot, not spots[0].
-        // yaw ≈ 0 on this screen, so body-space x/y maps straight to the stage.
-        const cx = R.scene.pose.x, cy = R.scene.pose.y - 128 * R.scene.pose.scale, k = 92 * R.scene.pose.scale;
-        live.sort((a, b) => Math.hypot(cx + a.x * k - sx, cy - a.y * k - sy)
-                          - Math.hypot(cx + b.x * k - sx, cy - b.y * k - sy));
-        live[0].erased = true;
-        R.emit('bubble', 4, { x: sx, y: sy, spread: 24, up: 0.4 });
-        R.wiggle(0.35); R.scene.eyeLid = 0.6; buzz(3);        // it likes this
+      if (phase === 'dry') {
+        // it flinches once, not on every pointermove — a 60Hz head-shake is a seizure
+        if (!nagT) { R.shakeHead(); buzz(3); nagT = setTimeout(() => { nagT = 0; }, 900); }
+        return;
       }
-      const pct = Math.round((1 - live.length / spots.length + 1 / spots.length) * 100);
-      bar.style.width = `${Math.min(100, pct)}%`;
+      if (phase !== 'wet') return;
+      const live = spots.filter((s) => !s.erased);
+      if (!live.length) return;
+      // scrub where the finger is: erase the nearest spot, not spots[0].
+      // yaw ≈ 0 on this screen, so body-space x/y maps straight to the stage.
+      const cx = R.scene.pose.x, cy = R.scene.pose.y - 128 * R.scene.pose.scale, k = 92 * R.scene.pose.scale;
+      live.sort((a, b) => Math.hypot(cx + a.x * k - sx, cy - a.y * k - sy)
+                        - Math.hypot(cx + b.x * k - sx, cy - b.y * k - sy));
+      live[0].erased = true;
+      R.emit('bubble', 4, { x: sx, y: sy, spread: 24, up: 0.4 });
+      R.wiggle(0.35); R.scene.eyeLid = 0.6; buzz(3);        // it likes this
+      const pct = Math.round((1 - (live.length - 1) / spots.length) * 100);
+      bar.style.width = `${pct}%`;
       // the bar tracks scrub progress; clean itself must only ever rise during a
       // bath, or one swipe on a mostly-clean creature drops it to ~17
       raw.meters.clean = Math.max(raw.meters.clean, Math.min(100, 8 + pct * 0.92));
-      if (live.length <= 1) {
-        done = true; S.care(raw, 'bathe'); buzz(20);
+      if (live.length === 1) {                              // that was the last spot
+        phase = 'scrubbed';
         R.scene.eyeLid = 1;
-        R.wiggle(0.9); R.squash(0.18, 0.7);                   // the shake-off
-        R.emit('droplet', 40, { spread: 200, up: 0.6 });
-        R.emit('heart', 5);
-        doneT = setTimeout(() => { location.hash = '#/'; }, 1200);
+        turn(rinse, true);
+        say('Now rinse it off', 'STILL COVERED IN SUDS');
       }
     };
+
     const ac = new AbortController();
-    const rest = () => { down = false; if (!done) R.scene.eyeLid = 1; };
+    const rest = () => { down = false; if (phase !== 'done') R.scene.eyeLid = 1; };
     stage.addEventListener('pointerdown', (e) => { down = true; erase(e); }, { signal: ac.signal });
     stage.addEventListener('pointermove', erase, { signal: ac.signal });
     window.addEventListener('pointerup', rest, { signal: ac.signal });
     window.addEventListener('pointercancel', rest, { signal: ac.signal });
-    $$('.sub3', root).forEach((b) => b.onclick = () => { R.emit('bubble', 10); R.wiggle(0.4); buzz(6); });
-    return () => { ac.abort(); clearTimeout(doneT); R.set({ bathing: false, eyeLid: 1 }); };
+    return () => {
+      ac.abort(); clearTimeout(doneT); clearTimeout(nagT);
+      R.set({ bathing: false, suds: 0, eyeLid: 1 });
+    };
   }
   return { html, mount };
 }
@@ -652,6 +694,7 @@ export function b5() {
 
     seed.addEventListener('pointerdown', (e) => {
       e.preventDefault();
+      seed.classList.add('held');
       const y0 = e.clientY;
       let last = { x: e.clientX, y: e.clientY, t: performance.now() }, vel = 0;
       const move = (ev) => {
@@ -1075,9 +1118,9 @@ export function d1() {
         <button class="card" data-go="#/fields"><div class="k">Field</div><div class="v">${S.fieldById(S.session.activeFieldId).name} ▾</div></button>
         <button class="card" id="sort"><div class="k">Sort</div><div class="v">${newest ? 'Newest' : 'Oldest'} ▾</div></button>
       </div>
-      <div class="dock">
-        <button class="cta" data-go="#/o/${Math.random().toString(36).slice(2, 8)}">
-          <div><b>Hatch a ${ord(list.length + 1)}</b><span>ORDER ANOTHER ODDISH</span></div><i>→</i></button>
+      <div class="dock" style="text-align:center">
+        <!-- no button: a new egg only comes off a real glass, same as the desktop nudge -->
+        <span class="chip flat">Tap the tag on your glass for a ${ord(list.length + 1)}</span>
       </div>
     </div>`;
   function mount(root) {
