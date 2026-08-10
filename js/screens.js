@@ -952,9 +952,16 @@ export function d1() {
   const html = `
     <div class="screen">
       ${actionTop('YOUR CREATURES', '#/')}
-      ${others.map((o) => {
+      ${others.map((o, i) => {
         const rare = o.creature.rarity !== 'Common';
-        return `<button class="chip pick" data-id="${o.creature.id}" style="position:absolute;left:${o.x}px;top:${o.y - 4}px;transform:translateX(-50%);z-index:6;padding:6px 11px;font-size:${11 + o.scale * 4}px;${rare ? 'background:rgba(232,194,100,.92)' : ''}">${nameOf(o.creature)}</button>`;
+        // The creature itself is painted on the canvas, so it can't carry a click. A
+        // transparent button parked over its body does — sized off the same sprite box
+        // render.js draws (230×320 at scale .62), narrowed to the body so neighbours
+        // don't steal each other's taps, and stacked front-to-back like the sprites are.
+        const k = o.scale / 0.62;
+        const w = 230 * k * 0.5, h = 320 * k * 0.62;
+        return `<button class="pick" aria-label="${nameOf(o.creature)}" data-id="${o.creature.id}" style="position:absolute;left:${o.x - w / 2}px;top:${o.y - h}px;width:${w}px;height:${h}px;z-index:${5 + i};background:none;border:0;padding:0"></button>`
+          + `<button class="chip pick" data-id="${o.creature.id}" style="position:absolute;left:${o.x}px;top:${o.y - 4}px;transform:translateX(-50%);z-index:${17 + i};padding:6px 11px;font-size:${11 + o.scale * 4}px;${rare ? 'background:rgba(232,194,100,.92)' : ''}">${nameOf(o.creature)}</button>`;
       }).join('')}
       <div style="position:absolute;left:24px;right:24px;top:118px;z-index:7" class="row">
         <button class="card" data-go="#/fields"><div class="k">Field</div><div class="v">${S.fieldById(S.session.activeFieldId).name} ▾</div></button>
