@@ -42,13 +42,11 @@ assert.ok(rare / n > 0.04 && rare / n < 0.13, `rare rate off: ${(rare / n * 100)
   assert.equal(c.id, hex.slice(0, 6), 'colliding id should extend to 6 chars');
 }
 
-// E2 must never fire before the first creature is named.
-session.creatures = [{ name: null, rarity: 'Common', lastSeenAt: now }, { name: null, rarity: 'Gold', lastSeenAt: now }];
-assert.equal(shouldNag(now), false, 'nagged before anything was named');
-session.creatures[0].name = 'Silt';
-assert.equal(shouldNag(now), true, 'should nag at two creatures once one is named');
-session.isGuest = false;
-assert.equal(shouldNag(now), false, 'nagged a signed-in account');
+// E2 is switched off at the top of shouldNag, so the only thing left to hold it to is
+// that it stays silent in the case that used to trigger it. Restore the naming and
+// signed-in assertions below when the early `return false` comes out.
+session.creatures = [{ name: 'Silt', rarity: 'Common', lastSeenAt: now }, { name: null, rarity: 'Gold', lastSeenAt: now }];
+assert.equal(shouldNag(now), false, 'E2 is disabled — shouldNag must stay false');
 
 assert.equal(clean('Sprig'), true);
 assert.equal(clean('sh1t'), true, 'filter is deliberately letters-only');
