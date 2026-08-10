@@ -43,7 +43,7 @@ const actionTop = (label, back = '#/') => `
     <button class="chip icon" data-go="${back}" aria-label="${back === '#/' ? 'Close' : 'Back'}"
       >${back === '#/' ? '✕' : '←'}</button>
     <span class="mono" style="font-size:11.5px;letter-spacing:.2em">${label}</span>
-    <button class="chip icon" data-go="#/menu" aria-label="Menu">≡</button>
+    <button class="chip icon burger" data-go="#/menu" aria-label="Menu"></button>
   </div>`;
 
 // Screens reachable from several places have no one fixed home, so they step back to
