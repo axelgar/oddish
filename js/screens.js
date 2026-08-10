@@ -3,6 +3,7 @@
 
 import * as R from './render.js';
 import * as S from './state.js';
+import qrcode from './vendor/qrcode.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -888,6 +889,68 @@ export function c2({ id }) {
   return { html, mount };
 }
 
+/* ---- the card ---------------------------------------------------------- */
+
+/* 4:5 at Instagram's tallest feed crop. The preview and the exported PNG are the same
+   drawing at two sizes — an overlay that only exists in the DOM is an overlay that
+   never makes it into the post, which is the whole point of this screen. */
+const CARD_W = 1080, CARD_H = 1350;
+
+// ponytail: the code points at the game, which is the only thing a stranger scrolling
+// Instagram can act on. Swap for the venue menu URL when there is one.
+const cardLink = () => location.origin + location.pathname;
+
+const rr = (x, px, py, w, h, r) => {
+  x.beginPath();
+  if (x.roundRect) x.roundRect(px, py, w, h, r); else x.rect(px, py, w, h);
+};
+
+/** letter-spaced fillText. Canvas has no tracking and this type is all tracking. */
+function track(x, s, px, py, ls) {
+  for (const ch of s) { x.fillText(ch, px, py); px += x.measureText(ch).width + ls; }
+}
+
+/** A real, scannable code on a cream tile — the quiet zone is part of the symbol, so
+ *  the tile has to be bigger than the modules or a phone camera won't lock on. */
+function qrTile(x, link, px, py, size) {
+  const q = qrcode(0, 'M');
+  q.addData(link); q.make();
+  const n = q.getModuleCount(), quiet = 3, m = size / (n + quiet * 2);
+  x.fillStyle = '#FFFDF5'; rr(x, px, py, size, size, size * 0.07); x.fill();
+  x.fillStyle = '#12211D';
+  for (let r = 0; r < n; r++) for (let col = 0; col < n; col++) {
+    if (q.isDark(r, col)) x.fillRect(px + (col + quiet) * m, py + (r + quiet) * m, m + 0.6, m + 0.6);
+  }
+}
+
+/** Portrait + wordmark + name + code, drawn in CARD space and scaled once to fit `w×h`. */
+function paintCard(x, w, h, shot, name) {
+  x.save();
+  x.setTransform(w / CARD_W, 0, 0, h / CARD_H, 0, 0);
+  x.fillStyle = '#22403A'; x.fillRect(0, 0, CARD_W, CARD_H);   // shows in the rounded corners only
+  rr(x, 0, 0, CARD_W, CARD_H, 76); x.clip();
+  x.drawImage(shot, 0, 0, CARD_W, CARD_H);
+  // the wordmark lands on lit grass in half the fields — it needs the floor darkened
+  const g = x.createLinearGradient(0, CARD_H * 0.6, 0, CARD_H);
+  g.addColorStop(0, 'rgba(18,33,29,0)'); g.addColorStop(1, 'rgba(18,33,29,.8)');
+  x.fillStyle = g; x.fillRect(0, CARD_H * 0.6, CARD_W, CARD_H * 0.4);
+
+  const L = 56, B = CARD_H - 62;
+  x.textBaseline = 'alphabetic';
+  x.font = '600 35px "JetBrains Mono", monospace';
+  x.fillStyle = 'rgba(255,79,163,.85)'; track(x, 'GLITCH', L + 4.4, B - 132, 9.8);   // the same
+  x.fillStyle = 'rgba(88,215,240,.85)'; track(x, 'GLITCH', L - 4.4, B - 132, 9.8);   // chromatic
+  x.fillStyle = '#FFFDF5'; track(x, 'GLITCH', L, B - 132, 9.8);                      // split .mark has
+  x.font = '700 70px "Bricolage Grotesque", "Instrument Sans", sans-serif';
+  const room = CARD_W - L - 300;                     // 14 letters must still clear the code
+  x.font = `700 ${Math.min(70, 70 * room / x.measureText(name).width)}px "Bricolage Grotesque", "Instrument Sans", sans-serif`;
+  track(x, name, L, B - 44, -2);
+  x.font = '500 32px "JetBrains Mono", monospace';
+  x.fillStyle = 'rgba(255,253,245,.72)'; track(x, 'HATCHED FROM AN ODDISH', L, B, 4.4);
+  qrTile(x, cardLink(), CARD_W - 56 - 158, CARD_H - 56 - 158, 158);
+  x.restore();
+}
+
 export function c3({ id }) {
   const raw = S.creatureById(id); if (!raw) return f2();
   const c = S.view(raw);
@@ -898,12 +961,6 @@ export function c3({ id }) {
       ${actionTop('PHOTO BOOTH', `#/c/${c.id}`)}
       <div class="frame" style="position:absolute;left:24px;right:24px;top:128px;height:428px">
         <canvas id="shot" width="342" height="428" style="width:100%;height:100%;display:block"></canvas>
-        <div style="position:absolute;left:16px;bottom:16px;color:#FFFDF5">
-          <div class="mark">GLITCH</div>
-          <div class="disp" style="font-size:22px;margin-top:6px">${nameOf(c)}</div>
-          <div class="mono" style="font-size:10px;opacity:.7;margin-top:4px">HATCHED FROM AN ODDISH</div>
-        </div>
-        <canvas class="qr" id="qr" width="21" height="21"></canvas>
       </div>
       <div style="position:absolute;left:24px;right:24px;top:576px">
         <div class="wrap">${fields.map((f) => {
@@ -913,34 +970,53 @@ export function c3({ id }) {
         <div class="note" style="margin-top:12px;color:rgba(255,253,245,.78)">LOCKED FIELDS SHOW GREYED · THAT'S THE POINT</div>
       </div>
       <div class="dock" style="background:linear-gradient(rgba(34,64,58,0),rgba(34,64,58,.95) 46%)">
-        <button class="cta" id="share" style="background:#FFFDF5"><div><b style="color:#22403A">Save the photo</b><span style="color:rgba(34,64,58,.7)">THE CODE GOES TO THE MENU</span></div><i style="background:#22403A;color:#FFFDF5">↓</i></button>
+        <button class="cta" id="share" style="background:#FFFDF5"><div><b style="color:#22403A">Save the photo</b><span style="color:rgba(34,64,58,.7)">THE CODE BRINGS THEM HERE</span></div><i style="background:#22403A;color:#FFFDF5">↓</i></button>
       </div>
     </div>`;
   function mount(root) {
     // the pose is frozen the moment the screen opens, in whichever field is selected.
-    // Render at device resolution — CSS keeps the display size, the PNG gets the pixels.
+    // One GL pass, at post resolution — the preview is that same bitmap scaled down.
     const cv = $('#shot', root), dpr = Math.min(window.devicePixelRatio || 1, 2);
     cv.width = 342 * dpr; cv.height = 428 * dpr;
-    const x = cv.getContext('2d');
-    R.portrait(c, x, cv.width, cv.height, S.session.activeFieldId);   // the decayed view — the photo must match home
-    // ponytail: block pattern stands in for the real code. Swap for a QR encoder
-    // pointing at the venue menu URL before this ships — it is the acquisition loop.
-    const q = $('#qr', root).getContext('2d');
-    q.fillStyle = '#FFFDF5'; q.fillRect(0, 0, 21, 21);
-    q.fillStyle = '#12211D';
-    const rr = S.rng(c.genomeSeed);
-    for (let i = 0; i < 21; i++) for (let j = 0; j < 21; j++) if (rr() > 0.52) q.fillRect(i, j, 1, 1);
+    const shot = document.createElement('canvas');
+    shot.width = CARD_W; shot.height = CARD_H;
+    R.portrait(c, shot.getContext('2d'), CARD_W, CARD_H, S.session.activeFieldId);   // the decayed view — the photo must match home
+    const out = document.createElement('canvas');
+    out.width = CARD_W; out.height = CARD_H;
+    const name = c.name || 'it';
+    // Baked before the tap, not after it: iOS refuses navigator.share once the gesture
+    // has gone stale, and encoding a 1080×1350 PNG is exactly long enough to do that.
+    let png = null;
+    const draw = () => {
+      if (!cv.isConnected) return;
+      paintCard(cv.getContext('2d'), cv.width, cv.height, shot, name);
+      paintCard(out.getContext('2d'), CARD_W, CARD_H, shot, name);
+      out.toBlob((b) => {
+        png = new File([b], `${name.toLowerCase()}-glitch.png`, { type: 'image/png' });
+        if (!navigator.canShare?.({ files: [png] })) return;
+        $('#share b', root).textContent = 'Share the photo';
+        $('#share span', root).textContent = 'INSTAGRAM, DMS, ANYWHERE';
+        $('#share i', root).textContent = '↑';
+      }, 'image/png');
+    };
+    draw();
+    document.fonts.ready.then(draw);        // the first paint can beat the webfonts in
     $$('.chip[data-f]', root).forEach((b) => b.onclick = () => {
       if (!b.dataset.f) return;
       S.session.activeFieldId = b.dataset.f; S.save(); window.dispatchEvent(new Event('hashchange'));
     });
     $('#share', root).onclick = () => {
-      cv.toBlob((blob) => {
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob); a.download = `${c.name || 'creature'}-glitch.png`; a.click();
-        URL.revokeObjectURL(a.href);
-      });
       buzz(12);
+      // The share sheet is the Instagram path — Stories and feed both live in it, and a
+      // web page cannot hand an image to the app any other way. Desktop falls back.
+      if (png && navigator.canShare?.({ files: [png] })) {
+        navigator.share({ files: [png] }).catch(() => {});
+        return;
+      }
+      const a = document.createElement('a');
+      a.href = png ? URL.createObjectURL(png) : out.toDataURL('image/png');
+      a.download = `${name.toLowerCase()}-glitch.png`; a.click();
+      if (png) URL.revokeObjectURL(a.href);
     };
   }
   return { html, mount };

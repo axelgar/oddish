@@ -63,6 +63,7 @@ follows the reference art (round bulb, leaf crown, glossy eyes, open smile):
 | `js/gl.js` | The geometry layer: one program, ramp textures, mesh upload, context loss |
 | `js/screens.js` | All 24 screens |
 | `js/app.js` | Router, glitch scheduler, synthesised audio, desktop clamp |
+| `js/vendor/qrcode.js` | qrcode-generator 1.4.4, MIT, vendored so the code works offline |
 | `test.mjs` | The self-check |
 
 ## What the handoff asked for and got
@@ -87,8 +88,10 @@ Marked in the source with `ponytail:` comments.
 - **No guest cookie.** localStorage only, so a cookie wipe loses everything — which is
   exactly the risk E2 warns about, and E2 says so honestly.
 - **Magic link is a stub.** `POST /api/auth/magic-link` + `/api/auth/claim`.
-- **The photo QR is a block pattern.** Swap for a real encoder pointing at the venue
-  menu before this ships — it is the acquisition loop.
+- **The photo code points at the game, not the venue menu.** C3 exports a 1080×1350
+  card — portrait, wordmark, name, scannable QR — and hands it to the share sheet, which
+  is how it reaches Instagram. `cardLink()` in `js/screens.js` is the one line to change
+  when there is a menu URL worth scanning.
 - **Audio is synthesised**, not sampled: a detuned WebAudio drone, zero assets. Replace
   with per-field loops when they exist.
 - **Fonts load from Google.** Self-host for a venue with bad wifi.

@@ -188,7 +188,6 @@ body{
 .slot.lock{opacity:.4;font:600 14px 'JetBrains Mono',monospace}
 
 .frame{border-radius:var(--r-frame);overflow:hidden;position:relative;background:#12211d}
-.qr{position:absolute;right:14px;bottom:14px;width:46px;height:46px;image-rendering:pixelated;border-radius:4px}
 
 .fieldcard{height:118px;border-radius:var(--r-card);overflow:hidden;position:relative;border:0;padding:0;display:block;width:100%}
 .fieldcard .lab{position:absolute;left:14px;bottom:12px;text-align:left}
