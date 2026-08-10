@@ -53,6 +53,7 @@ export const scene = {
   wiggleUntil: 0,            // happy wobble (scrubs, catches)
   chewUntil: 0,              // mouth pulses while > T
   bathing: false,            // bathe screen: show the full mud set to scrub
+  suds: 0,                   // 0..1 lather. Soap puts it on, rinse takes it off.
   hidden: false,
   fx: [],
 };
@@ -1555,15 +1556,31 @@ function drawMud(c, cam, met) {
   const amount = scene.bathing ? 1 : 1 - met.clean / 100;
   const S = cam.R / 92;
   for (const m of mudSpots(c)) {
-    if (m.erased) continue;
+    if (m.erased && !scene.suds) continue;     // lather outlives the mud, until the rinse
     if (m.i / mudSpots(c).length > amount + 0.15) continue;
     const d = decal(m.x, m.y, m.z, tr, cam);
     if (d.z < 0.05 || d.det <= 0) continue;
     onSurface(d);
-    ctx.fillStyle = `rgba(74,52,32,${0.38 * Math.min(1, d.z * 2)})`;
-    ctx.beginPath();
-    ctx.ellipse(0, 0, m.r * S, m.r * 0.72 * S, m.rot, 0, 7);
-    ctx.fill();
+    // Foam under, mud over. That ring IS the soaped state — without it, "soaped"
+    // would be a fact only the code knew, and rinsing would remove nothing visible.
+    if (scene.suds > 0) {
+      // droplet blue, not white — on the cream palettes a white ring vanishes into the body
+      const a = scene.suds * Math.min(1, d.z * 2);
+      ctx.fillStyle = `rgba(191,230,239,${0.7 * a})`;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, m.r * 1.5 * S, m.r * 1.1 * S, m.rot, 0, 7);
+      ctx.fill();
+      // the rim is what makes it a bubble: a pale fill alone disappears into a cream body
+      ctx.strokeStyle = `rgba(122,180,204,${0.75 * a})`;
+      ctx.lineWidth = 1.7 * S;
+      ctx.stroke();
+    }
+    if (!m.erased) {
+      ctx.fillStyle = `rgba(74,52,32,${0.38 * Math.min(1, d.z * 2)})`;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, m.r * S, m.r * 0.72 * S, m.rot, 0, 7);
+      ctx.fill();
+    }
     ctx.restore();
   }
 }
