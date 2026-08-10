@@ -1432,6 +1432,8 @@ function drawFace(c, cam, met, sick) {
   const tr = c.traits;
   const t = T;
   const S = cam.R / 92;
+  // any one need past halfway down and the face gives up on the smile
+  const sad = Math.min(met.hunger, met.clean, met.joy, met.rest) < 50;
 
   // eyes — big round ruby buttons with a soft window-light in them ----------
   const spread = 0.34, up = 0.10;
@@ -1456,7 +1458,7 @@ function drawFace(c, cam, met, sick) {
     if (d.z < 0.16 || d.det <= 0) return;      // det <= 0 → mirrored; a shut eye would arc the wrong way
     // the frame does the foreshortening now; this is only a clean dissolve at the rim
     const fade = Math.min(1, (d.z - 0.16) / 0.25);
-    const lid = Math.max(0.05, Math.min(1, restLid * bl * scene._eyeLid));
+    const lid = Math.max(0.05, Math.min(1, restLid * bl * scene._eyeLid * (sad ? 0.82 : 1)));
     const rx = 11.6 * S * es, ry0 = 14.6 * S * es;
     const ry = ry0 * lid;
 
@@ -1486,7 +1488,7 @@ function drawFace(c, cam, met, sick) {
   });
 
   // blush — only when it's genuinely happy
-  if (met.joy > 50) {
+  if (met.joy > 50 && !sad) {
     for (const s of [-1, 1]) {
       const d = decal(s * 0.56, -0.12, 0.78, tr, cam);
       if (d.z < 0.10 || d.det <= 0) continue;
@@ -1500,14 +1502,18 @@ function drawFace(c, cam, met, sick) {
   // mouth — a closed smile that opens into a happy "D" like the reference art -
   const md = decal(0, -0.24, 0.94, tr, cam);
   if (md.z > 0.14 && md.det > 0) {           // det <= 0 mirrors the frame, which inverts the smile
-    const open = Math.max(scene._mouth,
+    // sad keeps the mouth shut so it can frown; chewing still opens it, because a
+    // creature refusing to open for food reads as broken, not glum
+    const open = sad ? scene._mouth : Math.max(scene._mouth,
       reduced() ? 0.16 : 0.16 + 0.05 * Math.sin(t * 0.9) + (met.joy > 60 ? 0.10 : 0));
     const wide = 24 * S * tr.grin;
-    // INVARIANT: it is always smiling. Both paths below hang their corners above a
-    // bulge that curves down, which only reads as a smile while the mouth stays wider
-    // than it is deep — so a narrow grin caps how far it can open, and a wide-open
-    // mouth on a small grin becomes a broad "D" instead of a vertical slot.
+    // INVARIANT: an OPEN mouth is always a smile. Both paths below hang their corners
+    // above a bulge that curves down, which only reads as a smile while the mouth stays
+    // wider than it is deep — so a narrow grin caps how far it can open, and a wide-open
+    // mouth on a small grin becomes a broad "D" instead of a vertical slot. The shut
+    // path is the only one that flips, and it flips whole: corners and bulge together.
     const tall = Math.min((6 + open * 30) * S, wide * 1.15);
+    const dir = sad ? -1 : 1;
 
     onSurface(md);
     ctx.globalAlpha = Math.min(1, (md.z - 0.14) / 0.3);   // dissolve at the rim, like the eyes
@@ -1515,8 +1521,8 @@ function drawFace(c, cam, met, sick) {
       ctx.strokeStyle = 'rgba(40,30,36,.85)';
       ctx.lineWidth = 2.4 * S; ctx.lineCap = 'round';
       ctx.beginPath();
-      ctx.moveTo(-wide * 0.8, -tall * 0.1);
-      ctx.quadraticCurveTo(0, tall * 0.9, wide * 0.8, -tall * 0.1);
+      ctx.moveTo(-wide * 0.8, -tall * 0.1 * dir);
+      ctx.quadraticCurveTo(0, tall * 0.9 * dir, wide * 0.8, -tall * 0.1 * dir);
       ctx.stroke();
     } else {
       // corners sit above the bottom bulge → it always reads as a smile
