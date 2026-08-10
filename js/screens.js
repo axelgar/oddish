@@ -1292,7 +1292,7 @@ export function e4() {
         <button data-go="#/dress">Garnishes <span class="r">${s.unlockedGarnishes.length} of ${S.GARNISHES.length}</span></button>
         ${toggles.map(([k, label]) => `<button data-t="${k}">${label} <span class="r">${s[k] ? 'ON' : 'OFF'}</span></button>`).join('')}
         <a href="#/" id="tonight">Tonight at Glitch <span class="r">MENU ↗</span></a>
-        <button ${s.isGuest ? 'data-go="#/save"' : 'id="signout"'}>${s.isGuest ? 'Save my creatures' : 'Sign out'} <span class="r">${s.isGuest ? 'GUEST' : esc(s.email || '')}</span></button>
+        <!-- ponytail: guest/sign-in row hidden until the auth backend is real; #/save still routes -->
         <div style="text-align:center;margin-top:44px">
           <div class="mark" style="opacity:.35">GLITCH</div>
           <div class="note" style="margin-top:10px;opacity:.5">V0.1 · ODDISH · ${s.creatures.length} HATCHED</div>
@@ -1303,11 +1303,6 @@ export function e4() {
     $$('[data-t]', root).forEach((b) => b.onclick = () => {
       s[b.dataset.t] = !s[b.dataset.t]; S.save(); buzz(6);
       window.dispatchEvent(new Event('glitch:prefs'));   // app.js: drone on/off, --dur live
-      window.dispatchEvent(new Event('hashchange'));
-    });
-    // creatures stay — signing out only drops the (stubbed) account binding
-    $('#signout', root)?.addEventListener('click', () => {
-      s.isGuest = true; s.email = null; S.save(); buzz(8);
       window.dispatchEvent(new Event('hashchange'));
     });
   }
