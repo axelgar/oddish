@@ -162,6 +162,11 @@ body{
 .orb.prop{background:none;box-shadow:none;padding:0;filter:drop-shadow(0 6px 8px rgba(0,0,0,.42))}
 .orb.drag{position:fixed;z-index:20;pointer-events:none;margin:-30px 0 0 -30px;left:0;top:0;
   background:none;box-shadow:none;filter:drop-shadow(0 6px 8px rgba(0,0,0,.42))}
+/* a 60px berry disappears under the thumb holding it — swell it on pick-up and stay
+   swollen, so it reads around the finger the whole way across. On the child, not the
+   ghost itself: the ghost's transform is the finger position and must not lag. */
+.orb.drag>*{animation:grabbed 140ms ease-out forwards}
+@keyframes grabbed{from{transform:scale(1)}to{transform:scale(1.75)}}
 
 /* invisible hit area over the egg (centre 195,586 · ~80x100 radius), sized generously
    so a thumb lands on it. Focusable, so Enter/Space taps too. */
