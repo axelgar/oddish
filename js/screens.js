@@ -1291,7 +1291,7 @@ export function e4() {
         <button data-go="#/fields">Fields <span class="r">${s.unlockedFields.length} of ${S.PICKABLE.length}</span></button>
         <button data-go="#/dress">Garnishes <span class="r">${s.unlockedGarnishes.length} of ${S.GARNISHES.length}</span></button>
         ${toggles.map(([k, label]) => `<button data-t="${k}">${label} <span class="r">${s[k] ? 'ON' : 'OFF'}</span></button>`).join('')}
-        <a href="#/" id="tonight">Tonight at Glitch <span class="r">MENU ↗</span></a>
+        <a href="https://www.instagram.com/glitchbcn" target="_blank" rel="noopener" id="tonight">Tonight at Glitch <span class="r">MENU ↗</span></a>
         <!-- ponytail: guest/sign-in row hidden until the auth backend is real; #/save still routes -->
         <div style="text-align:center;margin-top:44px">
           <div class="mark" style="opacity:.35">GLITCH</div>
